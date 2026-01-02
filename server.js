@@ -19,7 +19,7 @@ const app = express();
 const PORT = 8087;
 const DB_FILE = path.join(__dirname, 'omnipds.sqlite');
 
-// Serve static files with explicit MIME types for TSX support
+// Static file serving with explicit MIME types for browser module support
 app.use(express.static(__dirname, {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
@@ -39,20 +39,14 @@ app.get('/env.js', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
-    core: 'OmniPDS 1.3.0-PRO',
-    storage: {
-      exists: fs.existsSync(DB_FILE),
-      size: fs.existsSync(DB_FILE) ? fs.statSync(DB_FILE).size : 0
-    },
+    core: 'OmniPDS 1.5.0-MUSCLE',
     ai: {
       active: !!process.env.API_KEY,
-      engine: 'gemini-3-pro-preview'
+      model: 'gemini-3-pro-preview'
     },
     system: {
       platform: os.platform(),
-      cpus: os.cpus().length,
-      freeMem: os.freemem(),
-      totalMem: os.totalmem(),
+      uptime: process.uptime(),
       load: os.loadavg()
     }
   });
@@ -62,41 +56,28 @@ app.get('/api/pds/load', (req, res) => {
   if (fs.existsSync(DB_FILE)) {
     res.sendFile(DB_FILE);
   } else {
-    res.status(404).json({ error: 'Sovereign ledger not yet initialized.' });
+    res.status(404).json({ error: 'Ledger not found' });
   }
 });
 
 app.post('/api/pds/persist', (req, res) => {
   try {
-    if (!req.body || req.body.length === 0) {
-      throw new Error("Persistence failed: Binary stream is empty.");
-    }
+    if (!req.body || req.body.length === 0) throw new Error("Empty body");
     fs.writeFileSync(DB_FILE, req.body);
-    console.log(`[OmniPDS] Committed ledger update: ${req.body.length} bytes`);
     res.sendStatus(200);
   } catch (e) {
-    console.error('[OmniPDS] Critical Save Error:', e);
-    res.status(500).json({ error: e.message });
+    res.status(500).send(e.message);
   }
 });
 
-// Fix for Express 5: Wildcard path '*' requires a parameter name or regex
-app.get('/:path((.*))', (req, res, next) => {
-  if (req.path.includes('.') || req.path.startsWith('/api')) {
+// Express 5 compatible catch-all route
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.includes('.')) {
     return next();
   }
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`
-  ╔══════════════════════════════════════════════╗
-  ║         OMNIPDS SOVEREIGN CORE v1.3          ║
-  ╠══════════════════════════════════════════════╣
-  ║ PORT: ${PORT}                                   ║
-  ║ STATUS: ONLINE                               ║
-  ║ STORAGE: omnipds.sqlite                      ║
-  ║ AI GATEWAY: ${process.env.API_KEY ? 'ACTIVE' : 'OFFLINE'}                     ║
-  ╚══════════════════════════════════════════════╝
-  `);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n  [OMNIPDS CORE] Active on http://localhost:${PORT}\n`);
 });
