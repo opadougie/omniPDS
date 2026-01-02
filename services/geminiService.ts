@@ -1,21 +1,43 @@
-import { GoogleGenAI, Type } from "@google/genai";
+
+import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
+import * as dbService from './dbService';
 
 const PRO_MODEL = 'gemini-3-pro-preview';
 
-/**
- * Generates deep insights using the model's high thinking budget for complex reasoning.
- */
+// Tool definitions to give the AI "muscle"
+const pdsTools: FunctionDeclaration[] = [
+  {
+    name: 'queryLedger',
+    parameters: {
+      type: Type.OBJECT,
+      description: 'Execute a read-only SQL query against the personal data server.',
+      properties: {
+        sql: { type: Type.STRING, description: 'The SQL SELECT statement.' }
+      },
+      required: ['sql']
+    }
+  },
+  {
+    name: 'getFTSResults',
+    parameters: {
+      type: Type.OBJECT,
+      description: 'Perform a high-speed full-text search across all personal records.',
+      properties: {
+        term: { type: Type.STRING, description: 'The search term.' }
+      },
+      required: ['term']
+    }
+  }
+];
+
 export const getPersonalInsights = async (data: any) => {
-  // Fix: Initialize GoogleGenAI right before making the API call to ensure it uses the most up-to-date API key.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: PRO_MODEL,
-    contents: `You are the OmniPDS Strategic Analyst. Analyze this unified data repository: ${JSON.stringify(data)}. 
-    Identify non-obvious correlations between work velocity, financial burn, and social reach. 
-    Provide 3 high-impact strategic insights.`,
+    contents: `You are the OmniPDS Strategic Analyst. Analyze this unified data repository: ${JSON.stringify(data)}. Identify non-obvious correlations and provide 3 high-impact insights.`,
     config: {
-      temperature: 1,
-      thinkingConfig: { thinkingBudget: 32768 },
+      temperature: 0.7,
+      thinkingConfig: { thinkingBudget: 16000 },
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -42,19 +64,57 @@ export const getPersonalInsights = async (data: any) => {
   return JSON.parse(response.text || '{"insights": []}');
 };
 
-/**
- * Generates a comprehensive 30-day "Sovereign Roadmap" correlating all modules.
- */
+export const chatWithPDS = async (history: { role: 'user' | 'model', parts: { text: string }[] }[], context: any) => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  // High-muscle chat with tool support
+  const response = await ai.models.generateContent({
+    model: PRO_MODEL,
+    contents: [
+      { role: 'user', parts: [{ text: `System Context: ${JSON.stringify(context)}` }] },
+      ...history.map(h => ({ role: h.role, parts: h.parts }))
+    ],
+    config: {
+      systemInstruction: 'You are the OmniPDS Prime AI. You have direct access to the user sovereign ledger. Use tools to query or search when needed. Be highly strategic.',
+      tools: [{ functionDeclarations: pdsTools }],
+      thinkingConfig: { thinkingBudget: 12000 }
+    }
+  });
+
+  // Handle simple tool call logic (basic implementation)
+  if (response.functionCalls && response.functionCalls.length > 0) {
+    const call = response.functionCalls[0];
+    let result = "No data found.";
+    
+    if (call.name === 'queryLedger') {
+      const dbResult = dbService.executeRawSQL(call.args.sql as string);
+      result = JSON.stringify(dbResult.data);
+    } else if (call.name === 'getFTSResults') {
+      const ftsResult = dbService.universalSearch(call.args.term as string);
+      result = JSON.stringify(ftsResult);
+    }
+
+    // Follow up with tool results
+    const finalResponse = await ai.models.generateContent({
+      model: PRO_MODEL,
+      contents: [
+        { role: 'user', parts: [{ text: `Result of tool ${call.name}: ${result}` }] }
+      ],
+      config: { systemInstruction: 'Based on the tool results above, provide a definitive answer.' }
+    });
+    return finalResponse.text;
+  }
+
+  return response.text;
+};
+
 export const getSovereignRoadmap = async (data: any) => {
-  // Fix: Initialize GoogleGenAI right before making the API call.
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: PRO_MODEL,
-    contents: `Create a 30-day strategic roadmap based on these PDS records: ${JSON.stringify(data)}. 
-    Format as a structured plan with weekly milestones, financial targets, and social engagement goals.`,
+    contents: `Create a 30-day strategic roadmap based on these records: ${JSON.stringify(data)}.`,
     config: {
       temperature: 0.9,
-      thinkingConfig: { thinkingBudget: 32768 },
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -77,24 +137,4 @@ export const getSovereignRoadmap = async (data: any) => {
   });
 
   return JSON.parse(response.text || '{"roadmap": []}');
-};
-
-export const chatWithPDS = async (history: { role: 'user' | 'model', parts: { text: string }[] }[], context: any) => {
-  // Fix: Initialize GoogleGenAI right before making the API call.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const chat = ai.chats.create({
-    model: PRO_MODEL,
-    config: {
-      systemInstruction: `You are the OmniPDS Prime AI. You represent the "Best AI" logic for a decentralized Personal Data Server.
-      You have total visibility into the user's Financial, Social, and Project data.
-      Your primary goal is to help the user achieve complete data and financial sovereignty.
-      Be highly analytical, strategic, and capable of complex multi-module cross-referencing.
-      Context: ${JSON.stringify(context)}`,
-      thinkingConfig: { thinkingBudget: 16000 }
-    }
-  });
-
-  const lastMessage = history[history.length - 1].parts[0].text;
-  const result = await chat.sendMessage({ message: lastMessage });
-  return result.text;
 };

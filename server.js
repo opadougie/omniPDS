@@ -19,7 +19,7 @@ const app = express();
 const PORT = 8087;
 const DB_FILE = path.join(__dirname, 'omnipds.sqlite');
 
-// Force application/javascript for .ts and .tsx files to satisfy strict MIME checking
+// Serve static files with explicit MIME types for TSX support
 app.use(express.static(__dirname, {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
@@ -39,7 +39,7 @@ app.get('/env.js', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
-    core: 'OmniPDS 1.3.0',
+    core: 'OmniPDS 1.3.0-PRO',
     storage: {
       exists: fs.existsSync(DB_FILE),
       size: fs.existsSync(DB_FILE) ? fs.statSync(DB_FILE).size : 0
@@ -54,10 +54,6 @@ app.get('/api/health', (req, res) => {
       freeMem: os.freemem(),
       totalMem: os.totalmem(),
       load: os.loadavg()
-    },
-    process: {
-      uptime: process.uptime(),
-      memory: process.memoryUsage().rss
     }
   });
 });
@@ -84,10 +80,10 @@ app.post('/api/pds/persist', (req, res) => {
   }
 });
 
-// Improved SPA Catch-All
-app.get('*', (req, res) => {
+// Fix for Express 5: Wildcard path '*' requires a parameter name or regex
+app.get('/:path((.*))', (req, res, next) => {
   if (req.path.includes('.') || req.path.startsWith('/api')) {
-    return res.status(404).send('Not found');
+    return next();
   }
   res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -99,18 +95,8 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   ╠══════════════════════════════════════════════╣
   ║ PORT: ${PORT}                                   ║
   ║ STATUS: ONLINE                               ║
-  ║ STORAGE: ${DB_FILE}                          ║
+  ║ STORAGE: omnipds.sqlite                      ║
   ║ AI GATEWAY: ${process.env.API_KEY ? 'ACTIVE' : 'OFFLINE'}                     ║
   ╚══════════════════════════════════════════════╝
-  Local Node: http://localhost:${PORT}
   `);
-});
-
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`[FATAL] Port ${PORT} is occupied.`);
-  } else {
-    console.error('[FATAL] System Error:', err);
-  }
-  process.exit(1);
 });
