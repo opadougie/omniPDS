@@ -7,7 +7,6 @@ import {
 let db: any = null;
 const SQL_WASM_PATH = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.wasm';
 
-// Observable for system logs
 let logListeners: ((log: string) => void)[] = [];
 export const onLog = (cb: (log: string) => void) => logListeners.push(cb);
 const notifyLog = (msg: string) => logListeners.forEach(cb => cb(`[${new Date().toLocaleTimeString()}] ${msg}`));
@@ -15,7 +14,14 @@ const notifyLog = (msg: string) => logListeners.forEach(cb => cb(`[${new Date().
 export const initDB = async () => {
   if (db) return db;
 
-  const SQL = await (window as any).initSqlJs({
+  // Use the global initSqlJs loaded via script tag in index.html
+  const initSqlJs = (window as any).initSqlJs;
+  if (!initSqlJs) {
+    notifyLog("SQL.js initialization failed: Global scope mismatch.");
+    return null;
+  }
+
+  const SQL = await initSqlJs({
     locateFile: () => SQL_WASM_PATH
   });
 
@@ -60,14 +66,12 @@ const createSchema = () => {
     CREATE TABLE IF NOT EXISTS health (id TEXT PRIMARY KEY, date TEXT, type TEXT, value REAL, unit TEXT);
     CREATE TABLE IF NOT EXISTS workflows (id TEXT PRIMARY KEY, name TEXT, triggerType TEXT, condition TEXT, action TEXT, active INTEGER);
     
-    -- Sovereign OS Extension
     CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, sender TEXT, receiver TEXT, text TEXT, timestamp TEXT, encrypted INTEGER);
     CREATE TABLE IF NOT EXISTS credentials (id TEXT PRIMARY KEY, type TEXT, issuer TEXT, data TEXT, issuedAt TEXT);
     CREATE TABLE IF NOT EXISTS media (id TEXT PRIMARY KEY, name TEXT, mimeType TEXT, size INTEGER, cid TEXT, addedAt TEXT);
     CREATE TABLE IF NOT EXISTS system_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, event TEXT, timestamp TEXT);
   `);
 
-  // Initial Seed
   db.run("INSERT OR IGNORE INTO balances VALUES ('USD', 12450.00, 'US Dollar', '$')");
   db.run("INSERT OR IGNORE INTO balances VALUES ('BTC', 0.12, 'Bitcoin', '₿')");
   db.run("INSERT OR IGNORE INTO system_audit (event, timestamp) VALUES ('Sovereign Core Initialized', datetime('now'))");
@@ -88,7 +92,6 @@ const persist = async () => {
   } catch (e) {}
 };
 
-// Generic Fetcher
 const queryAll = <T>(sql: string, params: any[] = []): T[] => {
   if (!db) return [];
   const res = db.exec(sql, params);
@@ -101,7 +104,6 @@ const queryAll = <T>(sql: string, params: any[] = []): T[] => {
   });
 };
 
-// DATA SERVICES
 export const getMessages = () => queryAll<Message>("SELECT * FROM messages ORDER BY timestamp DESC");
 export const addMessage = (m: Message) => {
   db.run("INSERT INTO messages VALUES (?,?,?,?,?,?)", [m.id, m.sender, m.receiver, m.text, m.timestamp, m.encrypted ? 1 : 0]);
@@ -177,6 +179,9 @@ export const universalSearch = (term: string) => {
   return results;
 };
 
-export const getDBSize = () => { const d = localStorage.getItem('omnipds_sqlite'); return d ? (d.length / 1024).toFixed(2) + " KB" : "0 KB"; };
+export const getDBSize = () => { 
+  const d = localStorage.getItem('omnipds_sqlite'); 
+  return d ? (JSON.parse(d).length / 1024).toFixed(2) + " KB" : "0 KB"; 
+};
 export const getTableRowCount = (t: string) => { if(!db) return 0; try { const r = db.exec(`SELECT COUNT(*) FROM ${t}`); return r[0].values[0][0]; } catch(e){return 0;} };
 export const executeRawSQL = (q: string) => { if(!db) return {success:false}; try { const r = db.exec(q); persist(); return {success:true, data:r}; } catch(e:any){return {success:false, error:e.message};} };

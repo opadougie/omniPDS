@@ -8,6 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+    <!-- Babel for on-the-fly TSX transpilation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="/env.js"></script>
     <style>
         body {
@@ -32,15 +34,10 @@
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
           background: #3b82f6;
         }
-        /* Glass and High Density Classes */
         .glass-panel {
           background: rgba(8, 11, 18, 0.8);
           backdrop-filter: blur(20px);
           border: 1px solid rgba(255, 255, 255, 0.05);
-        }
-        @keyframes subtle-pulse {
-          0%, 100% { opacity: 0.8; transform: scale(1); }
-          50% { opacity: 1; transform: scale(1.02); }
         }
         .pds-glow {
           box-shadow: 0 0 40px -10px rgba(59, 130, 246, 0.1);
@@ -49,18 +46,19 @@
 <script type="importmap">
 {
   "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react-dom": "https://esm.sh/react-dom@^19.2.3",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
     "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
     "recharts": "https://esm.sh/recharts@^3.6.0",
-    "path": "https://esm.sh/path@^0.12.7",
-    "url": "https://esm.sh/url@^0.11.4",
-    "dotenv": "https://esm.sh/dotenv@^17.2.3",
-    "body-parser": "https://esm.sh/body-parser@^2.2.1",
     "express": "https://esm.sh/express@^5.2.1",
     "fs": "https://esm.sh/fs@^0.0.1-security",
+    "path": "https://esm.sh/path@^0.12.7",
+    "url": "https://esm.sh/url@^0.11.4",
+    "body-parser": "https://esm.sh/body-parser@^2.2.1",
+    "dotenv": "https://esm.sh/dotenv@^17.2.3",
     "os": "https://esm.sh/os@^0.1.2"
   }
 }
@@ -68,5 +66,7 @@
 </head>
 <body>
     <div id="root"></div>
+    <!-- Load the app as a babel-processed module -->
+    <script type="text/babel" data-type="module" src="index.tsx"></script>
 </body>
 </html>

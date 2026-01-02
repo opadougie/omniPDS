@@ -1,3 +1,4 @@
+
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -6,46 +7,38 @@ import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import os from 'os';
 
-// Resolve directory name for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load environment variables from .env.local
 const envPath = path.join(__dirname, '.env.local');
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });
 }
 
 const app = express();
-// Explicitly set to 8087 per request
 const PORT = 8087;
 const DB_FILE = path.join(__dirname, 'omnipds.sqlite');
 
-// Middleware to handle large SQLite binary blobs (up to 50MB)
+// Manually set MIME types for TSX support in the browser
+express.static.mime.define({
+  'application/javascript': ['ts', 'tsx', 'jsx']
+});
+
 app.use(bodyParser.raw({ type: 'application/octet-stream', limit: '50mb' }));
 
-// Serve static assets from the current directory
+// Serve static files from the current directory
 app.use(express.static(__dirname));
 
-/**
- * Client Environment Injection
- * Serves the API Key to the frontend securely via an auto-loaded script.
- */
 app.get('/env.js', (req, res) => {
   res.set('Content-Type', 'application/javascript');
   const key = process.env.API_KEY || '';
   res.send(`window.process = { env: { API_KEY: "${key}" } };`);
 });
 
-/**
- * Sovereign Core Health Check
- * Provides hardware diagnostics and database status.
- */
 app.get('/api/health', (req, res) => {
-  const memUsed = process.memoryUsage();
   res.json({
     status: 'online',
-    core: 'OmniPDS 1.2.5',
+    core: 'OmniPDS 1.3.0',
     storage: {
       exists: fs.existsSync(DB_FILE),
       size: fs.existsSync(DB_FILE) ? fs.statSync(DB_FILE).size : 0
@@ -63,15 +56,11 @@ app.get('/api/health', (req, res) => {
     },
     process: {
       uptime: process.uptime(),
-      memory: memUsed.rss
+      memory: process.memoryUsage().rss
     }
   });
 });
 
-/**
- * PDS Data Retrieval
- * Streams the SQLite database binary to the client.
- */
 app.get('/api/pds/load', (req, res) => {
   if (fs.existsSync(DB_FILE)) {
     res.sendFile(DB_FILE);
@@ -80,10 +69,6 @@ app.get('/api/pds/load', (req, res) => {
   }
 });
 
-/**
- * PDS Data Persistence
- * Receives the raw binary export from sql.js and commits it to disk.
- */
 app.post('/api/pds/persist', (req, res) => {
   try {
     if (!req.body || req.body.length === 0) {
@@ -98,33 +83,31 @@ app.post('/api/pds/persist', (req, res) => {
   }
 });
 
-/**
- * SPA Catch-All
- * Routes all remaining traffic to index.html while ignoring /api and /env.js.
- */
-app.get(/^(?!\/api|\/env\.js).*$/, (req, res) => {
+// Improved SPA Catch-All: Only redirect if no file extension is present (e.g., /dashboard)
+app.get('*', (req, res) => {
+  if (req.path.includes('.') || req.path.startsWith('/api')) {
+    return res.status(404).send('Not found');
+  }
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Initialize Sovereign Node
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`
   ╔══════════════════════════════════════════════╗
-  ║         OMNIPDS SOVEREIGN CORE v1.2          ║
+  ║         OMNIPDS SOVEREIGN CORE v1.3          ║
   ╠══════════════════════════════════════════════╣
   ║ PORT: ${PORT}                                   ║
   ║ STATUS: ONLINE                               ║
-  ║ STORAGE: ${DB_FILE}          ║
+  ║ STORAGE: ${DB_FILE}                          ║
   ║ AI GATEWAY: ${process.env.API_KEY ? 'ACTIVE' : 'OFFLINE'}                     ║
   ╚══════════════════════════════════════════════╝
   Local Node: http://localhost:${PORT}
   `);
 });
 
-// Error handling for occupied ports
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`[FATAL] Port ${PORT} is occupied. Kill the other process or check .env.local.`);
+    console.error(`[FATAL] Port ${PORT} is occupied.`);
   } else {
     console.error('[FATAL] System Error:', err);
   }
