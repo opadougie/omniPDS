@@ -1,4 +1,3 @@
-
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
@@ -7,7 +6,7 @@ import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import os from 'os';
 
-// Fix for __dirname in ES Modules
+// Resolve directory name for ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -18,120 +17,116 @@ if (fs.existsSync(envPath)) {
 }
 
 const app = express();
-// Port explicitly set to 8087 as requested
-const PORT = process.env.PORT || 8087;
+// Explicitly set to 8087 per request
+const PORT = 8087;
 const DB_FILE = path.join(__dirname, 'omnipds.sqlite');
 
-// Middleware: Handle large binary SQLite exports (up to 50MB)
+// Middleware to handle large SQLite binary blobs (up to 50MB)
 app.use(bodyParser.raw({ type: 'application/octet-stream', limit: '50mb' }));
+
+// Serve static assets from the current directory
 app.use(express.static(__dirname));
 
 /**
- * SECURE ENVIRONMENT INJECTION
- * Injects the API_KEY into the client-side scope via window.process.env.
+ * Client Environment Injection
+ * Serves the API Key to the frontend securely via an auto-loaded script.
  */
 app.get('/env.js', (req, res) => {
   res.set('Content-Type', 'application/javascript');
-  res.send(`window.process = { env: { API_KEY: "${process.env.API_KEY || ''}" } };`);
+  const key = process.env.API_KEY || '';
+  res.send(`window.process = { env: { API_KEY: "${key}" } };`);
 });
 
 /**
- * SYSTEM DIAGNOSTICS
- * Returns hardware, process, and storage health metrics.
+ * Sovereign Core Health Check
+ * Provides hardware diagnostics and database status.
  */
 app.get('/api/health', (req, res) => {
   const memUsed = process.memoryUsage();
   res.json({
     status: 'online',
-    timestamp: new Date().toISOString(),
+    core: 'OmniPDS 1.2.5',
     storage: {
-      path: DB_FILE,
       exists: fs.existsSync(DB_FILE),
       size: fs.existsSync(DB_FILE) ? fs.statSync(DB_FILE).size : 0
     },
     ai: {
       active: !!process.env.API_KEY,
-      model: 'gemini-3-pro-preview'
+      engine: 'gemini-3-pro-preview'
     },
     system: {
       platform: os.platform(),
-      release: os.release(),
-      uptime: os.uptime(),
-      load: os.loadavg(),
       cpus: os.cpus().length,
+      freeMem: os.freemem(),
       totalMem: os.totalmem(),
-      freeMem: os.freemem()
+      load: os.loadavg()
     },
     process: {
       uptime: process.uptime(),
-      memory: memUsed.rss,
-      node: process.version
+      memory: memUsed.rss
     }
   });
 });
 
 /**
- * PDS LOAD
- * Serves the raw SQLite database file to the frontend.
+ * PDS Data Retrieval
+ * Streams the SQLite database binary to the client.
  */
 app.get('/api/pds/load', (req, res) => {
   if (fs.existsSync(DB_FILE)) {
     res.sendFile(DB_FILE);
   } else {
-    res.status(404).json({ error: 'Sovereign ledger not found on disk.' });
+    res.status(404).json({ error: 'Sovereign ledger not yet initialized.' });
   }
 });
 
 /**
- * PDS PERSIST
- * Receives the SQLite binary from the client and commits it to disk.
+ * PDS Data Persistence
+ * Receives the raw binary export from sql.js and commits it to disk.
  */
 app.post('/api/pds/persist', (req, res) => {
   try {
     if (!req.body || req.body.length === 0) {
-      throw new Error("Received empty binary stream.");
+      throw new Error("Persistence failed: Binary stream is empty.");
     }
     fs.writeFileSync(DB_FILE, req.body);
-    console.log(`[OmniPDS] Persisted ${req.body.length} bytes to ${DB_FILE}`);
+    console.log(`[OmniPDS] Committed ledger update: ${req.body.length} bytes`);
     res.sendStatus(200);
   } catch (e) {
-    console.error('[OmniPDS] Persistence Failure:', e);
+    console.error('[OmniPDS] Critical Save Error:', e);
     res.status(500).json({ error: e.message });
   }
 });
 
 /**
- * SPA FALLBACK
- * Routes all non-API requests to index.html for client-side routing.
- * Regex excludes any path starting with /api or specific files.
+ * SPA Catch-All
+ * Routes all remaining traffic to index.html while ignoring /api and /env.js.
  */
 app.get(/^(?!\/api|\/env\.js).*$/, (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Start Sovereign Core
+// Initialize Sovereign Node
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`
-  =========================================
-  OmniPDS Sovereign Infrastructure Active
-  =========================================
-  Core Version: 1.2.0
-  Port:         ${PORT}
-  Environment:  ${process.env.NODE_ENV || 'Development'}
-  AI Gateway:   ${process.env.API_KEY ? 'CONNECTED' : 'STANDALONE'}
-  Storage:      ${DB_FILE}
-  =========================================
-  Local Access: http://localhost:${PORT}
-  =========================================
+  ╔══════════════════════════════════════════════╗
+  ║         OMNIPDS SOVEREIGN CORE v1.2          ║
+  ╠══════════════════════════════════════════════╣
+  ║ PORT: ${PORT}                                   ║
+  ║ STATUS: ONLINE                               ║
+  ║ STORAGE: ${DB_FILE}          ║
+  ║ AI GATEWAY: ${process.env.API_KEY ? 'ACTIVE' : 'OFFLINE'}                     ║
+  ╚══════════════════════════════════════════════╝
+  Local Node: http://localhost:${PORT}
   `);
 });
 
-// Graceful error handling for port conflicts
-server.on('error', (e) => {
-  if (e.code === 'EADDRINUSE') {
-    console.error(`[FATAL] Port ${PORT} is occupied by another process.`);
+// Error handling for occupied ports
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[FATAL] Port ${PORT} is occupied. Kill the other process or check .env.local.`);
   } else {
-    console.error('[FATAL] Unhandled System Exception:', e);
+    console.error('[FATAL] System Error:', err);
   }
   process.exit(1);
 });
