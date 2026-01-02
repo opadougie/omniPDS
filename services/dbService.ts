@@ -1,5 +1,5 @@
 
-import { SocialPost, Transaction, ProjectTask, WalletBalance } from '../types';
+import { SocialPost, Transaction, ProjectTask, WalletBalance, Note, Contact } from '../types';
 
 let db: any = null;
 
@@ -14,18 +14,15 @@ export const initDB = async () => {
   });
 
   try {
-    // Attempt to load from MiniPC Server first
     const response = await fetch('/api/pds/load');
     if (response.ok) {
       const arrayBuffer = await response.arrayBuffer();
       const u8 = new Uint8Array(arrayBuffer);
       db = new SQL.Database(u8);
-      console.log("OmniPDS: Loaded ledger from MiniPC disk.");
     } else {
       throw new Error("No remote DB");
     }
   } catch (e) {
-    // Fallback to localStorage or Fresh
     const savedData = localStorage.getItem('omnipds_sqlite');
     if (savedData) {
       const u8 = new Uint8Array(JSON.parse(savedData));
@@ -40,40 +37,16 @@ export const initDB = async () => {
 
 const createSchema = () => {
   db.run(`
-    CREATE TABLE IF NOT EXISTS posts (
-      id TEXT PRIMARY KEY,
-      author TEXT,
-      text TEXT,
-      likes INTEGER,
-      createdAt TEXT
-    );
-    CREATE TABLE IF NOT EXISTS transactions (
-      id TEXT PRIMARY KEY,
-      amount REAL,
-      currency TEXT,
-      category TEXT,
-      type TEXT,
-      date TEXT,
-      description TEXT,
-      recipient TEXT
-    );
-    CREATE TABLE IF NOT EXISTS tasks (
-      id TEXT PRIMARY KEY,
-      title TEXT,
-      status TEXT,
-      priority TEXT
-    );
-    CREATE TABLE IF NOT EXISTS balances (
-      currency TEXT PRIMARY KEY,
-      amount REAL,
-      label TEXT,
-      symbol TEXT
-    );
+    CREATE TABLE IF NOT EXISTS posts (id TEXT PRIMARY KEY, author TEXT, text TEXT, likes INTEGER, createdAt TEXT);
+    CREATE TABLE IF NOT EXISTS transactions (id TEXT PRIMARY KEY, amount REAL, currency TEXT, category TEXT, type TEXT, date TEXT, description TEXT, recipient TEXT);
+    CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, title TEXT, status TEXT, priority TEXT);
+    CREATE TABLE IF NOT EXISTS balances (currency TEXT PRIMARY KEY, amount REAL, label TEXT, symbol TEXT);
+    CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, title TEXT, content TEXT, tags TEXT, updatedAt TEXT);
+    CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT, handle TEXT, category TEXT, lastContacted TEXT, notes TEXT);
   `);
 
   db.run("INSERT OR IGNORE INTO balances VALUES ('USD', 8450.20, 'US Dollar', '$')");
   db.run("INSERT OR IGNORE INTO balances VALUES ('EUR', 3210.55, 'Euro', '€')");
-  db.run("INSERT OR IGNORE INTO balances VALUES ('GBP', 1100.00, 'British Pound', '£')");
   db.run("INSERT OR IGNORE INTO balances VALUES ('BTC', 0.045, 'Bitcoin', '₿')");
   persist();
 };
@@ -81,11 +54,7 @@ const createSchema = () => {
 const persist = async () => {
   if (!db) return;
   const binary = db.export();
-  
-  // 1. Save to browser LocalStorage (Instant Fallback)
   localStorage.setItem('omnipds_sqlite', JSON.stringify(Array.from(binary)));
-  
-  // 2. Commit to MiniPC Disk (The "Muscle")
   try {
     await fetch('/api/pds/persist', {
       method: 'POST',
@@ -93,7 +62,7 @@ const persist = async () => {
       body: binary
     });
   } catch (e) {
-    console.warn("OmniPDS: Server persistence failed. Data currently only in browser cache.");
+    console.warn("OmniPDS Persistence failed.");
   }
 };
 
@@ -111,6 +80,43 @@ export const getTableRowCount = (table: string): number => {
   }
 };
 
+// NOTES
+export const getNotes = (): Note[] => {
+  const res = db.exec("SELECT * FROM notes ORDER BY updatedAt DESC");
+  if (!res.length) return [];
+  const columns = res[0].columns;
+  return res[0].values.map((row: any) => {
+    const obj: any = {};
+    columns.forEach((col: string, i: number) => obj[col] = row[i]);
+    return obj as Note;
+  });
+};
+
+export const addNote = (note: Note) => {
+  db.run("INSERT INTO notes (id, title, content, tags, updatedAt) VALUES (?, ?, ?, ?, ?)",
+    [note.id, note.title, note.content, note.tags, note.updatedAt]);
+  persist();
+};
+
+// CONTACTS
+export const getContacts = (): Contact[] => {
+  const res = db.exec("SELECT * FROM contacts ORDER BY lastContacted DESC");
+  if (!res.length) return [];
+  const columns = res[0].columns;
+  return res[0].values.map((row: any) => {
+    const obj: any = {};
+    columns.forEach((col: string, i: number) => obj[col] = row[i]);
+    return obj as Contact;
+  });
+};
+
+export const addContact = (contact: Contact) => {
+  db.run("INSERT INTO contacts (id, name, handle, category, lastContacted, notes) VALUES (?, ?, ?, ?, ?, ?)",
+    [contact.id, contact.name, contact.handle, contact.category, contact.lastContacted, contact.notes]);
+  persist();
+};
+
+// EXISTING
 export const getPosts = (): SocialPost[] => {
   const res = db.exec("SELECT * FROM posts ORDER BY createdAt DESC");
   if (!res.length) return [];
@@ -142,10 +148,7 @@ export const getTransactions = (): Transaction[] => {
 export const addTransaction = (t: Transaction) => {
   db.run("INSERT INTO transactions (id, amount, currency, category, type, date, description, recipient) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     [t.id, t.amount, t.currency, t.category, t.type, t.date, t.description, t.recipient || null]);
-  
-  db.run("UPDATE balances SET amount = amount " + (t.type === 'income' ? '+' : '-') + " ? WHERE currency = ?", 
-    [t.amount, t.currency]);
-  
+  db.run("UPDATE balances SET amount = amount " + (t.type === 'income' ? '+' : '-') + " ? WHERE currency = ?", [t.amount, t.currency]);
   persist();
 };
 
@@ -172,8 +175,7 @@ export const getTasks = (): ProjectTask[] => {
 };
 
 export const addTask = (task: ProjectTask) => {
-  db.run("INSERT INTO tasks (id, title, status, priority) VALUES (?, ?, ?, ?)",
-    [task.id, task.title, task.status, task.priority]);
+  db.run("INSERT INTO tasks (id, title, status, priority) VALUES (?, ?, ?, ?)", [task.id, task.title, task.status, task.priority]);
   persist();
 };
 

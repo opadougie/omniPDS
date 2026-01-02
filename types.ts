@@ -6,14 +6,33 @@ export enum OmniModule {
   INSIGHTS = 'INSIGHTS',
   IDENTITY = 'IDENTITY',
   WALLET = 'WALLET',
-  SYSTEM_LEDGER = 'SYSTEM_LEDGER'
+  SYSTEM_LEDGER = 'SYSTEM_LEDGER',
+  VAULT = 'VAULT',
+  PULSE = 'PULSE'
 }
 
-export interface PDSItem {
-  cid: string;
-  rev: string;
-  collection: string;
-  content: any;
+export interface Note {
+  id: string;
+  title: string;
+  content: string;
+  tags: string;
+  updatedAt: string;
+}
+
+export interface Contact {
+  id: string;
+  name: string;
+  handle?: string;
+  category: 'Professional' | 'Personal' | 'Strategic';
+  lastContacted: string;
+  notes?: string;
+}
+
+export interface SocialPost {
+  id: string;
+  author: string;
+  text: string;
+  likes: number;
   createdAt: string;
 }
 
@@ -42,12 +61,4 @@ export interface ProjectTask {
   title: string;
   status: 'todo' | 'doing' | 'done';
   priority: 'low' | 'medium' | 'high';
-}
-
-export interface SocialPost {
-  id: string;
-  author: string;
-  text: string;
-  likes: number;
-  createdAt: string;
 }
