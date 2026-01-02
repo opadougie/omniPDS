@@ -65,6 +65,36 @@ const persist = async () => {
   } catch (e) {}
 };
 
+export const universalSearch = (term: string) => {
+  if (!term || term.length < 2) return [];
+  const results: any[] = [];
+  const query = `%${term}%`;
+
+  const tables = [
+    { name: 'notes', col: 'title', type: 'VAULT' },
+    { name: 'posts', col: 'text', type: 'SOCIAL' },
+    { name: 'contacts', col: 'name', type: 'PULSE' },
+    { name: 'assets', col: 'name', type: 'INVENTORY' },
+    { name: 'transactions', col: 'description', type: 'FINANCE' }
+  ];
+
+  tables.forEach(t => {
+    try {
+      const res = db.exec(`SELECT * FROM ${t.name} WHERE ${t.col} LIKE ?`, [query]);
+      if (res.length) {
+        const columns = res[0].columns;
+        res[0].values.forEach((row: any) => {
+          const obj: any = { _type: t.type };
+          columns.forEach((col: string, i: number) => obj[col] = row[i]);
+          results.push(obj);
+        });
+      }
+    } catch (e) {}
+  });
+
+  return results;
+};
+
 export const getDBSize = () => {
   const data = localStorage.getItem('omnipds_sqlite');
   return data ? (data.length / 1024).toFixed(2) + " KB" : "0 KB";
@@ -131,7 +161,7 @@ export const addContact = (contact: Contact) => {
   persist();
 };
 
-// POSTS, TRANSACTIONS, TASKS
+// SOCIAL
 export const getPosts = (): SocialPost[] => {
   const res = db.exec("SELECT * FROM posts ORDER BY createdAt DESC");
   if (!res.length) return [];
@@ -149,6 +179,7 @@ export const addPost = (post: SocialPost) => {
   persist();
 };
 
+// FINANCE
 export const getTransactions = (): Transaction[] => {
   const res = db.exec("SELECT * FROM transactions ORDER BY date DESC");
   if (!res.length) return [];
@@ -178,6 +209,7 @@ export const getBalances = (): WalletBalance[] => {
   });
 };
 
+// PROJECTS
 export const getTasks = (): ProjectTask[] => {
   const res = db.exec("SELECT * FROM tasks");
   if (!res.length) return [];
