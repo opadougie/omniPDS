@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutDashboard, Users, Wallet as WalletIcon, Briefcase, Sparkles, Settings, 
   CreditCard, Globe, Copy, Check, Database, Terminal, Zap, BookOpen, UserPlus, 
-  Box, Search, X, Activity, Workflow, Radio
+  Box, Search, X, Activity, Workflow, Radio, MessageSquare, Fingerprint, Image, ListFilter
 } from 'lucide-react';
 import { OmniModule, SocialPost, Transaction, ProjectTask, WalletBalance, Note, Contact, Asset, HealthMetric, WorkflowRule } from './types';
 import SidebarItem from './components/SidebarItem';
@@ -20,6 +20,9 @@ import InventoryModule from './components/InventoryModule';
 import HealthModule from './components/HealthModule';
 import WorkflowModule from './components/WorkflowModule';
 import CommandCenter from './components/CommandCenter';
+import CommsModule from './components/CommsModule';
+import IdentityModule from './components/IdentityModule';
+import MediaModule from './components/MediaModule';
 import * as dbService from './services/dbService';
 
 const DEFAULT_CATEGORIES = ['Salary', 'Food', 'Groceries', 'Rent', 'Investments', 'Entertainment', 'Utilities', 'Transfer', 'Shopping', 'Travel'];
@@ -30,6 +33,7 @@ const App: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [dbReady, setDbReady] = useState(false);
   const [aiActive, setAiActive] = useState(false);
+  const [logs, setLogs] = useState<string[]>([]);
   
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -45,12 +49,9 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
 
-  const pdsData = useMemo(() => ({
-    posts, transactions, balances, tasks, notes, contacts, assets, health, workflows
-  }), [posts, transactions, balances, tasks, notes, contacts, assets, health, workflows]);
-
   useEffect(() => {
-    let mounted = true;
+    dbService.onLog(msg => setLogs(prev => [msg, ...prev].slice(0, 50)));
+    
     const loadDB = async () => {
       await dbService.initDB();
       let keyDetected = !!process.env.API_KEY;
@@ -59,20 +60,16 @@ const App: React.FC = () => {
         keyDetected = healthRes.ai.active;
       } catch (e) {}
       
-      if (mounted) {
-        setAiActive(keyDetected);
-        refreshData();
-        setDbReady(true);
-      }
+      setAiActive(keyDetected);
+      refreshData();
+      setDbReady(true);
     };
     loadDB();
-    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
     if (searchTerm.length > 1) {
-      const results = dbService.universalSearch(searchTerm);
-      setSearchResults(results);
+      setSearchResults(dbService.universalSearch(searchTerm));
     } else {
       setSearchResults([]);
     }
@@ -93,7 +90,10 @@ const App: React.FC = () => {
 
   const renderModule = () => {
     switch (activeModule) {
-      case OmniModule.COMMAND_CENTER: return <CommandCenter feed={unifiedFeed} stats={pdsData} onNavigate={(m) => setActiveModule(m)} />;
+      case OmniModule.COMMAND_CENTER: return <CommandCenter feed={unifiedFeed} stats={{posts, transactions, balances, tasks, notes, contacts, assets, health, workflows}} onNavigate={setActiveModule} />;
+      case OmniModule.COMMS: return <CommsModule />;
+      case OmniModule.CREDENTIALS: return <IdentityModule />;
+      case OmniModule.MEDIA: return <MediaModule />;
       case OmniModule.SOCIAL: return <SocialModule posts={posts} onAddPost={(t) => { dbService.addPost({id:Date.now().toString(), author:'me.pds', text:t, likes:0, createdAt:new Date().toISOString()}); refreshData(); }} />;
       case OmniModule.FINANCE: return <FinanceModule transactions={transactions} onAdd={(t) => { dbService.addTransaction({...t, id:Date.now().toString()}); refreshData(); }} categories={categories} onAddCategory={(c) => setCategories([...categories, c])} />;
       case OmniModule.WALLET: return <WalletModule balances={balances} transactions={transactions} onTransaction={(t) => { dbService.addTransaction({...t, id:Date.now().toString()}); refreshData(); }} categories={categories} onAddCategory={(c) => setCategories([...categories, c])} />;
@@ -103,9 +103,9 @@ const App: React.FC = () => {
       case OmniModule.INVENTORY: return <InventoryModule assets={assets} onAdd={(a) => { dbService.addAsset({...a, id:Date.now().toString()}); refreshData(); }} />;
       case OmniModule.HEALTH: return <HealthModule health={health} onAdd={(m) => { dbService.addHealthMetric({...m, id:Date.now().toString()}); refreshData(); }} />;
       case OmniModule.WORKFLOWS: return <WorkflowModule workflows={workflows} />;
-      case OmniModule.INSIGHTS: return <InsightsModule data={pdsData} />;
+      case OmniModule.INSIGHTS: return <InsightsModule data={{posts, transactions, balances, tasks, notes, contacts, assets, health, workflows}} />;
       case OmniModule.SYSTEM_LEDGER: return <SystemLedgerModule aiActive={aiActive} />;
-      default: return <DashboardModule posts={posts} transactions={transactions} tasks={tasks} />;
+      default: return <CommandCenter feed={unifiedFeed} stats={{posts, transactions, balances, tasks, notes, contacts, assets, health, workflows}} onNavigate={setActiveModule} />;
     }
   };
 
@@ -125,14 +125,16 @@ const App: React.FC = () => {
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-2xl shadow-blue-900/20"><Radio className="text-white" size={28} /></div>
           <div className="hidden md:block">
             <h1 className="text-xl font-black tracking-tight leading-none text-white">OMNIPDS</h1>
-            <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mt-1">Sovereign Node v1.2</p>
+            <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mt-1">Sovereign Node v1.3</p>
           </div>
         </div>
         
         <div className="flex-1 space-y-1 px-4 overflow-y-auto custom-scrollbar">
-          <div className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.2em] mb-4 px-2">Intelligence</div>
+          <div className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.2em] mb-4 px-2">Sovereign OS</div>
           <SidebarItem icon={<LayoutDashboard />} label="Command Center" active={activeModule === OmniModule.COMMAND_CENTER} onClick={() => setActiveModule(OmniModule.COMMAND_CENTER)} />
-          <SidebarItem icon={<Activity />} label="Health Matrix" active={activeModule === OmniModule.HEALTH} onClick={() => setActiveModule(OmniModule.HEALTH)} />
+          <SidebarItem icon={<MessageSquare />} label="Comms Hub" active={activeModule === OmniModule.COMMS} onClick={() => setActiveModule(OmniModule.COMMS)} />
+          <SidebarItem icon={<Fingerprint />} label="Identity" active={activeModule === OmniModule.CREDENTIALS} onClick={() => setActiveModule(OmniModule.CREDENTIALS)} />
+          <SidebarItem icon={<Activity />} label="Bio-Matrix" active={activeModule === OmniModule.HEALTH} onClick={() => setActiveModule(OmniModule.HEALTH)} />
           <SidebarItem icon={<Sparkles />} label="Strategic AI" active={activeModule === OmniModule.INSIGHTS} onClick={() => setActiveModule(OmniModule.INSIGHTS)} />
           
           <div className="h-4"></div>
@@ -143,27 +145,12 @@ const App: React.FC = () => {
           <SidebarItem icon={<BookOpen />} label="Vault" active={activeModule === OmniModule.VAULT} onClick={() => setActiveModule(OmniModule.VAULT)} />
           
           <div className="h-4"></div>
-          <div className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.2em] mb-4 px-2">Network</div>
-          <SidebarItem icon={<Users />} label="Social Hub" active={activeModule === OmniModule.SOCIAL} onClick={() => setActiveModule(OmniModule.SOCIAL)} />
-          <SidebarItem icon={<UserPlus />} label="Pulse" active={activeModule === OmniModule.PULSE} onClick={() => setActiveModule(OmniModule.PULSE)} />
-          <SidebarItem icon={<Box />} label="Assets" active={activeModule === OmniModule.INVENTORY} onClick={() => setActiveModule(OmniModule.INVENTORY)} />
-          
-          <div className="h-4"></div>
-          <div className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.2em] mb-4 px-2">System</div>
-          <SidebarItem icon={<Workflow />} label="Workflows" active={activeModule === OmniModule.WORKFLOWS} onClick={() => setActiveModule(OmniModule.WORKFLOWS)} />
-          <SidebarItem icon={<Terminal />} label="Root Terminal" active={activeModule === OmniModule.SYSTEM_LEDGER} onClick={() => setActiveModule(OmniModule.SYSTEM_LEDGER)} />
-        </div>
-
-        <div className="px-6 mt-auto">
-          <div className={`p-4 rounded-2xl border ${aiActive ? 'border-blue-500/20 bg-blue-500/5' : 'border-gray-800 bg-gray-900'} hidden md:block`}>
-            <div className="flex items-center justify-between mb-2">
-              <p className={`text-[10px] font-black uppercase ${aiActive ? 'text-blue-400' : 'text-gray-500'}`}>
-                Quantum Link
-              </p>
-              <div className={`w-2 h-2 rounded-full ${aiActive ? 'bg-blue-400 animate-pulse' : 'bg-gray-700'}`}></div>
-            </div>
-            <p className="text-[11px] text-gray-500 font-medium">Encrypted P2P relay active. Data residency confirmed.</p>
-          </div>
+          <div className="text-[10px] font-bold text-gray-600 uppercase tracking-[0.2em] mb-4 px-2">Infrastructure</div>
+          <SidebarItem icon={<Users />} label="Social" active={activeModule === OmniModule.SOCIAL} onClick={() => setActiveModule(OmniModule.SOCIAL)} />
+          <SidebarItem icon={<Box />} label="Inventory" active={activeModule === OmniModule.INVENTORY} onClick={() => setActiveModule(OmniModule.INVENTORY)} />
+          <SidebarItem icon={<Image />} label="Media" active={activeModule === OmniModule.MEDIA} onClick={() => setActiveModule(OmniModule.MEDIA)} />
+          <SidebarItem icon={<Workflow />} label="Automations" active={activeModule === OmniModule.WORKFLOWS} onClick={() => setActiveModule(OmniModule.WORKFLOWS)} />
+          <SidebarItem icon={<Terminal />} label="Terminal" active={activeModule === OmniModule.SYSTEM_LEDGER} onClick={() => setActiveModule(OmniModule.SYSTEM_LEDGER)} />
         </div>
       </nav>
 
@@ -179,38 +166,26 @@ const App: React.FC = () => {
                 placeholder="Universal Search (Ctrl + K)"
                 className="w-full bg-[#080b12] border border-gray-800 rounded-2xl py-3.5 pl-12 pr-4 outline-none focus:ring-2 focus:ring-blue-600/30 focus:border-blue-500/50 transition-all text-sm font-medium"
               />
-              {searchTerm && (
-                <button onClick={() => setSearchTerm('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors"><X size={16} /></button>
-              )}
               {searchResults.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-4 bg-[#080b12] border border-gray-800 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
-                  <div className="p-3 border-b border-gray-800 bg-gray-950/50 text-[10px] font-black uppercase tracking-widest text-gray-600">Cross-Module Results</div>
-                  <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
-                    {searchResults.map((res, i) => (
-                      <button key={i} onClick={() => { setActiveModule(res._type as OmniModule); setSearchTerm(''); }} className="w-full flex items-center gap-4 px-5 py-4 hover:bg-blue-600/10 border-b border-gray-800/50 last:border-0 transition-all group">
-                         <div className="p-2.5 bg-gray-900 rounded-xl text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-all"><Database size={16}/></div>
-                         <div>
-                            <p className="font-bold text-sm text-gray-100">{res.title || res.name || res.description || res.text}</p>
-                            <span className="text-[10px] font-black text-gray-600 uppercase tracking-tighter">{res._type} • ID: {res.id?.slice(0,8)}</span>
-                         </div>
-                      </button>
-                    ))}
-                  </div>
+                <div className="absolute top-full left-0 right-0 mt-4 bg-[#080b12] border border-gray-800 rounded-3xl shadow-2xl overflow-hidden z-50">
+                  <div className="p-3 border-b border-gray-800 bg-gray-950/50 text-[10px] font-black uppercase tracking-widest text-gray-600">Cross-Module Search Results</div>
+                  {searchResults.map((res, i) => (
+                    <button key={i} onClick={() => { setActiveModule(res._type as OmniModule); setSearchTerm(''); }} className="w-full flex items-center gap-4 px-5 py-4 hover:bg-blue-600/10 border-b border-gray-800/50 last:border-0 transition-all">
+                       <div className="p-2.5 bg-gray-900 rounded-xl text-blue-400"><Database size={16}/></div>
+                       <div className="text-left">
+                          <p className="font-bold text-sm text-gray-100">{res.title || res.text || res.description}</p>
+                          <span className="text-[10px] font-black text-gray-600 uppercase tracking-tighter">{res._type}</span>
+                       </div>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-8 ml-8">
-            <div className="hidden lg:flex items-center gap-4">
-              <div className="text-right">
-                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Residency</p>
-                <p className="text-xs font-bold text-blue-400">Localhost:8087</p>
-              </div>
-              <div className="w-px h-8 bg-gray-800"></div>
-              <button onClick={() => { navigator.clipboard.writeText("did:plc:omni8927"); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="px-4 py-2.5 bg-[#080b12] border border-gray-800 rounded-2xl text-[10px] flex items-center gap-3 hover:border-gray-700 transition-all font-mono group">
-                <span className="text-gray-500 group-hover:text-gray-300">DID:</span><span className="text-blue-400">omni8927</span>
-                {copied ? <Check size={14} className="text-green-500"/> : <Copy size={14} className="text-gray-600"/>}
-              </button>
+          <div className="flex items-center gap-6">
+            <div className="text-right hidden sm:block">
+               <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest leading-none">Status</p>
+               <p className="text-xs font-bold text-blue-400">Node: Local/8087</p>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-gray-800 to-gray-950 border border-gray-800 shadow-xl overflow-hidden">
                <img src="https://picsum.photos/seed/pds/100/100" alt="Avatar" className="w-full h-full object-cover opacity-80" />
@@ -219,8 +194,25 @@ const App: React.FC = () => {
         </header>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-          <div className="p-10 max-w-[1600px] mx-auto">{renderModule()}</div>
+          <div className="p-10 max-w-[1600px] mx-auto pb-32">{renderModule()}</div>
         </div>
+
+        {/* Real-time System Pulse */}
+        <footer className="h-10 border-t border-gray-900 bg-[#080b12] flex items-center px-6 gap-6 z-40">
+           <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${aiActive ? 'bg-blue-500 animate-pulse' : 'bg-gray-700'}`}></span>
+              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Sovereign Core</span>
+           </div>
+           <div className="h-4 w-px bg-gray-800"></div>
+           <div className="flex-1 overflow-hidden whitespace-nowrap">
+              <p className="text-[10px] font-mono text-blue-400/70 animate-in slide-in-from-left-2">{logs[0] || 'System Ready. Waiting for interactions...'}</p>
+           </div>
+           <div className="h-4 w-px bg-gray-800"></div>
+           <div className="flex items-center gap-4 text-[10px] font-bold text-gray-600 uppercase">
+              <span>DB Size: {dbService.getDBSize()}</span>
+              <span>Uptime: {Math.floor(performance.now() / 1000)}s</span>
+           </div>
+        </footer>
       </main>
     </div>
   );

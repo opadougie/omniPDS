@@ -1,14 +1,21 @@
 
-import { SocialPost, Transaction, ProjectTask, WalletBalance, Note, Contact, Asset, HealthMetric, WorkflowRule } from '../types';
+import { 
+  SocialPost, Transaction, ProjectTask, WalletBalance, Note, 
+  Contact, Asset, HealthMetric, WorkflowRule, Message, Credential, MediaAsset 
+} from '../types';
 
 let db: any = null;
 const SQL_WASM_PATH = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.wasm';
 
+// Observable for system logs
+let logListeners: ((log: string) => void)[] = [];
+export const onLog = (cb: (log: string) => void) => logListeners.push(cb);
+const notifyLog = (msg: string) => logListeners.forEach(cb => cb(`[${new Date().toLocaleTimeString()}] ${msg}`));
+
 export const initDB = async () => {
   if (db) return db;
 
-  // @ts-ignore
-  const SQL = await window.initSqlJs({
+  const SQL = await (window as any).initSqlJs({
     locateFile: () => SQL_WASM_PATH
   });
 
@@ -17,18 +24,13 @@ export const initDB = async () => {
     if (response.ok) {
       const arrayBuffer = await response.arrayBuffer();
       const u8 = new Uint8Array(arrayBuffer);
-      const header = String.fromCharCode(...u8.slice(0, 15));
-      if (header.includes("SQLite format 3")) {
-        db = new SQL.Database(u8);
-        console.log("[OmniPDS] Sovereign Ledger synchronized.");
-      } else {
-        throw new Error("Invalid header.");
-      }
+      db = new SQL.Database(u8);
+      notifyLog("Sovereign Ledger synchronized with remote node.");
     } else {
-      throw new Error(`Status: ${response.status}`);
+      throw new Error("PDS remote unavailable.");
     }
   } catch (e) {
-    console.warn("[OmniPDS] Local Fallback Active.", e);
+    notifyLog("PDS Remote unavailable. Initializing local-first cache.");
     const savedData = localStorage.getItem('omnipds_sqlite');
     if (savedData) {
       try {
@@ -57,15 +59,18 @@ const createSchema = () => {
     CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, name TEXT, serial TEXT, value REAL, category TEXT, location TEXT, purchaseDate TEXT);
     CREATE TABLE IF NOT EXISTS health (id TEXT PRIMARY KEY, date TEXT, type TEXT, value REAL, unit TEXT);
     CREATE TABLE IF NOT EXISTS workflows (id TEXT PRIMARY KEY, name TEXT, triggerType TEXT, condition TEXT, action TEXT, active INTEGER);
-
-    -- FTS Global Search Index (Simulated if FTS5 is unavailable, but used as search pool)
-    CREATE TABLE IF NOT EXISTS fts_global (id TEXT, table_name TEXT, content TEXT);
+    
+    -- Sovereign OS Extension
+    CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, sender TEXT, receiver TEXT, text TEXT, timestamp TEXT, encrypted INTEGER);
+    CREATE TABLE IF NOT EXISTS credentials (id TEXT PRIMARY KEY, type TEXT, issuer TEXT, data TEXT, issuedAt TEXT);
+    CREATE TABLE IF NOT EXISTS media (id TEXT PRIMARY KEY, name TEXT, mimeType TEXT, size INTEGER, cid TEXT, addedAt TEXT);
+    CREATE TABLE IF NOT EXISTS system_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, event TEXT, timestamp TEXT);
   `);
 
-  // Default Balances
+  // Initial Seed
   db.run("INSERT OR IGNORE INTO balances VALUES ('USD', 12450.00, 'US Dollar', '$')");
   db.run("INSERT OR IGNORE INTO balances VALUES ('BTC', 0.12, 'Bitcoin', '₿')");
-  db.run("INSERT OR IGNORE INTO balances VALUES ('ETH', 2.4, 'Ethereum', 'Ξ')");
+  db.run("INSERT OR IGNORE INTO system_audit (event, timestamp) VALUES ('Sovereign Core Initialized', datetime('now'))");
   
   persist();
 };
@@ -83,66 +88,80 @@ const persist = async () => {
   } catch (e) {}
 };
 
-// RELATIONAL DATA FETCHING
-export const getHealthMetrics = (): HealthMetric[] => {
+// Generic Fetcher
+const queryAll = <T>(sql: string, params: any[] = []): T[] => {
   if (!db) return [];
-  const res = db.exec("SELECT * FROM health ORDER BY date DESC LIMIT 100");
+  const res = db.exec(sql, params);
   if (!res.length) return [];
   const columns = res[0].columns;
   return res[0].values.map((row: any) => {
     const obj: any = {};
     columns.forEach((col: string, i: number) => obj[col] = row[i]);
-    return obj as HealthMetric;
+    return obj as T;
   });
 };
 
-export const addHealthMetric = (m: HealthMetric) => {
-  db.run("INSERT INTO health (id, date, type, value, unit) VALUES (?, ?, ?, ?, ?)", [m.id, m.date, m.type, m.value, m.unit]);
+// DATA SERVICES
+export const getMessages = () => queryAll<Message>("SELECT * FROM messages ORDER BY timestamp DESC");
+export const addMessage = (m: Message) => {
+  db.run("INSERT INTO messages VALUES (?,?,?,?,?,?)", [m.id, m.sender, m.receiver, m.text, m.timestamp, m.encrypted ? 1 : 0]);
+  notifyLog(`Committed Message: ${m.id}`);
   persist();
 };
 
-export const getWorkflowRules = (): WorkflowRule[] => {
-  if (!db) return [];
-  const res = db.exec("SELECT * FROM workflows");
-  if (!res.length) return [];
-  const columns = res[0].columns;
-  return res[0].values.map((row: any) => {
-    const obj: any = {};
-    columns.forEach((col: string, i: number) => obj[col] = row[i]);
-    return { ...obj, active: !!obj.active } as WorkflowRule;
-  });
+export const getCredentials = () => queryAll<Credential>("SELECT * FROM credentials ORDER BY issuedAt DESC");
+export const addCredential = (c: Credential) => {
+  db.run("INSERT INTO credentials VALUES (?,?,?,?,?)", [c.id, c.type, c.issuer, c.data, c.issuedAt]);
+  notifyLog(`Vault Entry: Credential ${c.type} stored.`);
+  persist();
 };
+
+export const getMedia = () => queryAll<MediaAsset>("SELECT * FROM media ORDER BY addedAt DESC");
+export const addMedia = (m: MediaAsset) => {
+  db.run("INSERT INTO media VALUES (?,?,?,?,?,?)", [m.id, m.name, m.mimeType, m.size, m.cid, m.addedAt]);
+  persist();
+};
+
+export const getPosts = () => queryAll<SocialPost>("SELECT * FROM posts ORDER BY createdAt DESC");
+export const getTransactions = () => queryAll<Transaction>("SELECT * FROM transactions ORDER BY date DESC");
+export const getBalances = () => queryAll<WalletBalance>("SELECT * FROM balances");
+export const getTasks = () => queryAll<ProjectTask>("SELECT * FROM tasks");
+export const getNotes = () => queryAll<Note>("SELECT * FROM notes ORDER BY updatedAt DESC");
+export const getContacts = () => queryAll<Contact>("SELECT * FROM contacts");
+export const getAssets = () => queryAll<Asset>("SELECT * FROM assets");
+export const getHealthMetrics = () => queryAll<HealthMetric>("SELECT * FROM health ORDER BY date DESC LIMIT 100");
+export const getWorkflowRules = () => queryAll<WorkflowRule>("SELECT * FROM workflows");
+
+export const addPost = (p: SocialPost) => { db.run("INSERT INTO posts VALUES (?,?,?,?,?)", [p.id, p.author, p.text, p.likes, p.createdAt]); notifyLog("Social block committed."); persist(); };
+export const addTransaction = (t: Transaction) => { 
+  db.run("INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?,?)", [t.id, t.amount, t.currency, t.category, t.type, t.date, t.description, t.recipient, t.contactId]); 
+  db.run("UPDATE balances SET amount = amount " + (t.type === 'income' ? '+' : '-') + " ? WHERE currency = ?", [t.amount, t.currency]);
+  notifyLog(`Ledger Update: ${t.type} ${t.amount} ${t.currency}`);
+  persist(); 
+};
+export const addTask = (t: ProjectTask) => { db.run("INSERT INTO tasks VALUES (?,?,?,?,?)", [t.id, t.title, t.status, t.priority, t.projectId]); persist(); };
+export const updateTaskStatus = (id: string, s: string) => { db.run("UPDATE tasks SET status = ? WHERE id = ?", [s, id]); persist(); };
+export const addNote = (n: Note) => { db.run("INSERT INTO notes VALUES (?,?,?,?,?)", [n.id, n.title, n.content, n.tags, n.updatedAt]); persist(); };
+export const addContact = (c: Contact) => { db.run("INSERT INTO contacts VALUES (?,?,?,?,?,?)", [c.id, c.name, c.handle, c.category, c.lastContacted, c.notes]); persist(); };
+export const addAsset = (a: Asset) => { db.run("INSERT INTO assets VALUES (?,?,?,?,?,?,?)", [a.id, a.name, a.serial, a.value, a.category, a.location, a.purchaseDate]); persist(); };
+export const addHealthMetric = (m: HealthMetric) => { db.run("INSERT INTO health VALUES (?,?,?,?,?)", [m.id, m.date, m.type, m.value, m.unit]); persist(); };
 
 export const getUnifiedFeed = () => {
-  if (!db) return [];
-  const results: any[] = [];
-  try {
-    const posts = db.exec("SELECT 'SOCIAL' as type, createdAt as date, text as title, author as subtitle FROM posts ORDER BY createdAt DESC LIMIT 10");
-    const txs = db.exec("SELECT 'FINANCE' as type, date, description as title, amount || ' ' || currency as subtitle FROM transactions ORDER BY date DESC LIMIT 10");
-    const tasks = db.exec("SELECT 'PROJECT' as type, title as title, status as subtitle, id as date FROM tasks LIMIT 10");
-
-    [posts, txs, tasks].forEach(res => {
-      if (res.length) {
-        res[0].values.forEach((row: any) => {
-          results.push({ type: row[0], date: row[1], title: row[2], subtitle: row[3] });
-        });
-      }
-    });
-  } catch (e) {}
-  return results.sort((a,b) => b.date.localeCompare(a.date));
+  const posts = queryAll<any>("SELECT 'SOCIAL' as type, createdAt as date, text as title, author as subtitle FROM posts ORDER BY createdAt DESC LIMIT 10");
+  const txs = queryAll<any>("SELECT 'FINANCE' as type, date, description as title, amount || ' ' || currency as subtitle FROM transactions ORDER BY date DESC LIMIT 10");
+  const tasks = queryAll<any>("SELECT 'PROJECT' as type, title as title, status as subtitle, id as date FROM tasks LIMIT 10");
+  return [...posts, ...txs, ...tasks].sort((a,b) => b.date.localeCompare(a.date));
 };
 
-// RE-EXPORTING EXISTING SERVICES WITH PERSISTENCE ENFORCEMENT
 export const universalSearch = (term: string) => {
-  if (!db || !term) return [];
   const query = `%${term}%`;
-  const results: any[] = [];
   const tables = [
     { name: 'notes', col: 'content', type: 'VAULT' },
     { name: 'posts', col: 'text', type: 'SOCIAL' },
     { name: 'transactions', col: 'description', type: 'FINANCE' },
-    { name: 'health', col: 'type', type: 'HEALTH' }
+    { name: 'messages', col: 'text', type: 'COMMS' }
   ];
+  let results: any[] = [];
   tables.forEach(t => {
     try {
       const res = db.exec(`SELECT * FROM ${t.name} WHERE ${t.col} LIKE ?`, [query]);
@@ -153,31 +172,10 @@ export const universalSearch = (term: string) => {
           results.push(obj);
         });
       }
-    } catch (e) {}
+    } catch(e){}
   });
   return results;
 };
-
-// PASSTHROUGHS
-export const getPosts = () => { if(!db) return []; const r = db.exec("SELECT * FROM posts ORDER BY createdAt DESC"); return r.length ? r[0].values.map((v:any) => { const o:any={}; r[0].columns.forEach((c:any,i:any)=>o[c]=v[i]); return o;}) : []; };
-export const getTransactions = () => { if(!db) return []; const r = db.exec("SELECT * FROM transactions ORDER BY date DESC"); return r.length ? r[0].values.map((v:any) => { const o:any={}; r[0].columns.forEach((c:any,i:any)=>o[c]=v[i]); return o;}) : []; };
-export const getBalances = () => { if(!db) return []; const r = db.exec("SELECT * FROM balances"); return r.length ? r[0].values.map((v:any) => { const o:any={}; r[0].columns.forEach((c:any,i:any)=>o[c]=v[i]); return o;}) : []; };
-export const getTasks = () => { if(!db) return []; const r = db.exec("SELECT * FROM tasks"); return r.length ? r[0].values.map((v:any) => { const o:any={}; r[0].columns.forEach((c:any,i:any)=>o[c]=v[i]); return o;}) : []; };
-export const getNotes = () => { if(!db) return []; const r = db.exec("SELECT * FROM notes ORDER BY updatedAt DESC"); return r.length ? r[0].values.map((v:any) => { const o:any={}; r[0].columns.forEach((c:any,i:any)=>o[c]=v[i]); return o;}) : []; };
-export const getContacts = () => { if(!db) return []; const r = db.exec("SELECT * FROM contacts"); return r.length ? r[0].values.map((v:any) => { const o:any={}; r[0].columns.forEach((c:any,i:any)=>o[c]=v[i]); return o;}) : []; };
-export const getAssets = () => { if(!db) return []; const r = db.exec("SELECT * FROM assets"); return r.length ? r[0].values.map((v:any) => { const o:any={}; r[0].columns.forEach((c:any,i:any)=>o[c]=v[i]); return o;}) : []; };
-
-export const addPost = (p: SocialPost) => { db.run("INSERT INTO posts VALUES (?,?,?,?,?)", [p.id, p.author, p.text, p.likes, p.createdAt]); persist(); };
-export const addTransaction = (t: Transaction) => { 
-  db.run("INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?,?)", [t.id, t.amount, t.currency, t.category, t.type, t.date, t.description, t.recipient, t.contactId]); 
-  db.run("UPDATE balances SET amount = amount " + (t.type === 'income' ? '+' : '-') + " ? WHERE currency = ?", [t.amount, t.currency]);
-  persist(); 
-};
-export const addTask = (t: ProjectTask) => { db.run("INSERT INTO tasks VALUES (?,?,?,?,?)", [t.id, t.title, t.status, t.priority, t.projectId]); persist(); };
-export const updateTaskStatus = (id: string, s: string) => { db.run("UPDATE tasks SET status = ? WHERE id = ?", [s, id]); persist(); };
-export const addNote = (n: Note) => { db.run("INSERT INTO notes VALUES (?,?,?,?,?)", [n.id, n.title, n.content, n.tags, n.updatedAt]); persist(); };
-export const addContact = (c: Contact) => { db.run("INSERT INTO contacts VALUES (?,?,?,?,?,?)", [c.id, c.name, c.handle, c.category, c.lastContacted, c.notes]); persist(); };
-export const addAsset = (a: Asset) => { db.run("INSERT INTO assets VALUES (?,?,?,?,?,?,?)", [a.id, a.name, a.serial, a.value, a.category, a.location, a.purchaseDate]); persist(); };
 
 export const getDBSize = () => { const d = localStorage.getItem('omnipds_sqlite'); return d ? (d.length / 1024).toFixed(2) + " KB" : "0 KB"; };
 export const getTableRowCount = (t: string) => { if(!db) return 0; try { const r = db.exec(`SELECT COUNT(*) FROM ${t}`); return r[0].values[0][0]; } catch(e){return 0;} };

@@ -12,7 +12,36 @@ export enum OmniModule {
   INVENTORY = 'INVENTORY',
   HEALTH = 'HEALTH',
   WORKFLOWS = 'WORKFLOWS',
-  COMMAND_CENTER = 'COMMAND_CENTER'
+  COMMAND_CENTER = 'COMMAND_CENTER',
+  COMMS = 'COMMS',
+  CREDENTIALS = 'CREDENTIALS',
+  MEDIA = 'MEDIA'
+}
+
+export interface Message {
+  id: string;
+  sender: string;
+  receiver: string;
+  text: string;
+  timestamp: string;
+  encrypted: boolean;
+}
+
+export interface Credential {
+  id: string;
+  type: string;
+  issuer: string;
+  data: string;
+  issuedAt: string;
+}
+
+export interface MediaAsset {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  cid: string;
+  addedAt: string;
 }
 
 export interface Asset {
@@ -68,7 +97,7 @@ export interface Transaction {
   date: string;
   description: string;
   recipient?: string;
-  contactId?: string; // Relational link
+  contactId?: string;
 }
 
 export interface ProjectTask {
