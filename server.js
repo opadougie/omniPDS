@@ -81,8 +81,8 @@ app.post('/api/pds/persist', (req, res) => {
   }
 });
 
-// SPA Fallback
-app.get('*', (req, res) => {
+// SPA Fallback - Updated for Express 5 / path-to-regexp v6+ compatibility
+app.get('(.*)', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 

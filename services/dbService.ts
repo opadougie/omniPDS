@@ -18,15 +18,29 @@ export const initDB = async () => {
     if (response.ok) {
       const arrayBuffer = await response.arrayBuffer();
       const u8 = new Uint8Array(arrayBuffer);
-      db = new SQL.Database(u8);
+      
+      // Check for SQLite header: 'SQLite format 3'
+      const header = String.fromCharCode(...u8.slice(0, 15));
+      if (header.includes("SQLite format 3")) {
+        db = new SQL.Database(u8);
+        console.log("[OmniPDS] Sovereign Ledger synchronized from Relay.");
+      } else {
+        throw new Error("Remote file is not a valid SQLite database.");
+      }
     } else {
-      throw new Error("No remote DB");
+      throw new Error(`Relay response: ${response.status}`);
     }
   } catch (e) {
+    console.warn("[OmniPDS] Remote load failed or fresh install. Falling back to local cache/memory.", e);
     const savedData = localStorage.getItem('omnipds_sqlite');
     if (savedData) {
-      const u8 = new Uint8Array(JSON.parse(savedData));
-      db = new SQL.Database(u8);
+      try {
+        const u8 = new Uint8Array(JSON.parse(savedData));
+        db = new SQL.Database(u8);
+      } catch (innerE) {
+        db = new SQL.Database();
+        createSchema();
+      }
     } else {
       db = new SQL.Database();
       createSchema();
@@ -55,6 +69,7 @@ const createSchema = () => {
 const persist = async () => {
   if (!db) return;
   const binary = db.export();
+  // Backup to localStorage for high availability
   localStorage.setItem('omnipds_sqlite', JSON.stringify(Array.from(binary)));
   try {
     await fetch('/api/pds/persist', {
@@ -62,11 +77,13 @@ const persist = async () => {
       headers: { 'Content-Type': 'application/octet-stream' },
       body: binary
     });
-  } catch (e) {}
+  } catch (e) {
+    console.error("[OmniPDS] Persist to Relay failed, saved to LocalStorage only.");
+  }
 };
 
 export const universalSearch = (term: string) => {
-  if (!term || term.length < 2) return [];
+  if (!db || !term || term.length < 2) return [];
   const results: any[] = [];
   const query = `%${term}%`;
 
@@ -101,6 +118,7 @@ export const getDBSize = () => {
 };
 
 export const getTableRowCount = (table: string): number => {
+  if (!db) return 0;
   try {
     const res = db.exec(`SELECT COUNT(*) FROM ${table}`);
     return res[0].values[0][0];
@@ -109,6 +127,7 @@ export const getTableRowCount = (table: string): number => {
 
 // ASSETS
 export const getAssets = (): Asset[] => {
+  if (!db) return [];
   const res = db.exec("SELECT * FROM assets ORDER BY purchaseDate DESC");
   if (!res.length) return [];
   const columns = res[0].columns;
@@ -127,6 +146,7 @@ export const addAsset = (asset: Asset) => {
 
 // NOTES
 export const getNotes = (): Note[] => {
+  if (!db) return [];
   const res = db.exec("SELECT * FROM notes ORDER BY updatedAt DESC");
   if (!res.length) return [];
   const columns = res[0].columns;
@@ -145,6 +165,7 @@ export const addNote = (note: Note) => {
 
 // CONTACTS
 export const getContacts = (): Contact[] => {
+  if (!db) return [];
   const res = db.exec("SELECT * FROM contacts ORDER BY lastContacted DESC");
   if (!res.length) return [];
   const columns = res[0].columns;
@@ -163,6 +184,7 @@ export const addContact = (contact: Contact) => {
 
 // SOCIAL
 export const getPosts = (): SocialPost[] => {
+  if (!db) return [];
   const res = db.exec("SELECT * FROM posts ORDER BY createdAt DESC");
   if (!res.length) return [];
   const columns = res[0].columns;
@@ -181,6 +203,7 @@ export const addPost = (post: SocialPost) => {
 
 // FINANCE
 export const getTransactions = (): Transaction[] => {
+  if (!db) return [];
   const res = db.exec("SELECT * FROM transactions ORDER BY date DESC");
   if (!res.length) return [];
   const columns = res[0].columns;
@@ -199,6 +222,7 @@ export const addTransaction = (t: Transaction) => {
 };
 
 export const getBalances = (): WalletBalance[] => {
+  if (!db) return [];
   const res = db.exec("SELECT * FROM balances");
   if (!res.length) return [];
   const columns = res[0].columns;
@@ -211,6 +235,7 @@ export const getBalances = (): WalletBalance[] => {
 
 // PROJECTS
 export const getTasks = (): ProjectTask[] => {
+  if (!db) return [];
   const res = db.exec("SELECT * FROM tasks");
   if (!res.length) return [];
   const columns = res[0].columns;
@@ -232,6 +257,7 @@ export const updateTaskStatus = (id: string, status: string) => {
 };
 
 export const executeRawSQL = (query: string) => {
+  if (!db) return { success: false, error: "Database not initialized" };
   try {
     const res = db.exec(query);
     persist();
