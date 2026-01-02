@@ -1,9 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { Terminal, Database, Play, Save, Trash2, AlertCircle, FileJson, Table as TableIcon } from 'lucide-react';
+import { Terminal, Database, Play, Save, Trash2, AlertCircle, FileJson, Table as TableIcon, Zap, ExternalLink, Info } from 'lucide-react';
 import * as dbService from '../services/dbService';
 
-const SystemLedgerModule: React.FC = () => {
+interface SystemLedgerModuleProps {
+  aiActive?: boolean;
+}
+
+const SystemLedgerModule: React.FC<SystemLedgerModuleProps> = ({ aiActive }) => {
   const [query, setQuery] = useState('SELECT * FROM posts LIMIT 10;');
   const [results, setResults] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -157,8 +161,45 @@ const SystemLedgerModule: React.FC = () => {
           )}
         </div>
 
-        {/* Schema Explorer */}
+        {/* Diagnostics & Schema Explorer */}
         <div className="lg:col-span-4 space-y-6">
+          {/* AI Diagnostic Panel */}
+          <div className="p-6 bg-gradient-to-br from-[#0b0f1a] to-gray-900 rounded-3xl border border-gray-800">
+            <h4 className="font-bold text-sm mb-4 flex items-center gap-2">
+              <Zap size={16} className="text-amber-400" /> AI Environment Diagnostic
+            </h4>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-500 font-medium">API Key Status</span>
+                <span className={`font-bold px-2 py-0.5 rounded ${aiActive ? 'bg-green-500/20 text-green-400' : 'bg-rose-500/20 text-rose-400'}`}>
+                  {aiActive ? 'RESOLVED' : 'MISSING'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-gray-500 font-medium">Engine Path</span>
+                <span className="text-blue-400 font-mono">/opt/omnipds/.env.local</span>
+              </div>
+              {!aiActive && (
+                <div className="mt-4 p-4 bg-amber-900/10 border border-amber-500/20 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 text-amber-400 text-[10px] font-bold uppercase tracking-wider">
+                    <Info size={12} /> Key Recovery Guide
+                  </div>
+                  <p className="text-[11px] text-gray-400 leading-relaxed">
+                    If you already have a key, check your <strong>Google AI Studio</strong> dashboard under "My API Keys".
+                  </p>
+                  <a 
+                    href="https://aistudio.google.com/app/apikey" 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="flex items-center gap-2 text-blue-400 hover:text-blue-300 text-xs font-bold pt-1"
+                  >
+                    Open AI Studio <ExternalLink size={12} />
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="p-6 bg-[#0b0f1a] rounded-3xl border border-gray-800">
             <h4 className="font-bold text-sm mb-4 flex items-center gap-2">
               <TableIcon size={16} className="text-blue-400" /> Protocol Schema

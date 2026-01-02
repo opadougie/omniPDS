@@ -13,19 +13,27 @@ export const initDB = async () => {
     locateFile: () => SQL_WASM_PATH
   });
 
-  const savedData = localStorage.getItem('omnipds_sqlite');
-  if (savedData) {
-    try {
+  try {
+    // Attempt to load from MiniPC Server first
+    const response = await fetch('/api/pds/load');
+    if (response.ok) {
+      const arrayBuffer = await response.arrayBuffer();
+      const u8 = new Uint8Array(arrayBuffer);
+      db = new SQL.Database(u8);
+      console.log("OmniPDS: Loaded ledger from MiniPC disk.");
+    } else {
+      throw new Error("No remote DB");
+    }
+  } catch (e) {
+    // Fallback to localStorage or Fresh
+    const savedData = localStorage.getItem('omnipds_sqlite');
+    if (savedData) {
       const u8 = new Uint8Array(JSON.parse(savedData));
       db = new SQL.Database(u8);
-    } catch (e) {
-      console.error("Failed to load existing DB, creating fresh.", e);
+    } else {
       db = new SQL.Database();
       createSchema();
     }
-  } else {
-    db = new SQL.Database();
-    createSchema();
   }
   return db;
 };
@@ -63,7 +71,6 @@ const createSchema = () => {
     );
   `);
 
-  // Seed initial data
   db.run("INSERT OR IGNORE INTO balances VALUES ('USD', 8450.20, 'US Dollar', '$')");
   db.run("INSERT OR IGNORE INTO balances VALUES ('EUR', 3210.55, 'Euro', '€')");
   db.run("INSERT OR IGNORE INTO balances VALUES ('GBP', 1100.00, 'British Pound', '£')");
@@ -71,10 +78,23 @@ const createSchema = () => {
   persist();
 };
 
-const persist = () => {
+const persist = async () => {
   if (!db) return;
   const binary = db.export();
+  
+  // 1. Save to browser LocalStorage (Instant Fallback)
   localStorage.setItem('omnipds_sqlite', JSON.stringify(Array.from(binary)));
+  
+  // 2. Commit to MiniPC Disk (The "Muscle")
+  try {
+    await fetch('/api/pds/persist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: binary
+    });
+  } catch (e) {
+    console.warn("OmniPDS: Server persistence failed. Data currently only in browser cache.");
+  }
 };
 
 export const getDBSize = () => {

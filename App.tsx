@@ -12,7 +12,9 @@ import {
   Copy,
   Check,
   Database,
-  Terminal
+  Terminal,
+  Zap,
+  ZapOff
 } from 'lucide-react';
 import { OmniModule, SocialPost, Transaction, ProjectTask, WalletBalance } from './types';
 import SidebarItem from './components/SidebarItem';
@@ -32,6 +34,7 @@ const App: React.FC = () => {
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [copied, setCopied] = useState(false);
   const [dbReady, setDbReady] = useState(false);
+  const [aiActive, setAiActive] = useState(false);
   
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -49,6 +52,15 @@ const App: React.FC = () => {
     let mounted = true;
     const loadDB = async () => {
       await dbService.initDB();
+      // Check server health to confirm AI Key presence
+      try {
+        const health = await fetch('/api/health').then(r => r.json());
+        if (mounted) setAiActive(health.ai_active);
+      } catch (e) {
+        // Fallback to client check
+        if (mounted) setAiActive(!!(window as any).process?.env?.API_KEY);
+      }
+
       if (mounted) {
         refreshData();
         setDbReady(true);
@@ -127,7 +139,7 @@ const App: React.FC = () => {
       case OmniModule.WALLET: return <WalletModule balances={balances} transactions={transactions} onTransaction={handleAddTransaction} categories={categories} onAddCategory={addCategory} />;
       case OmniModule.PROJECTS: return <ProjectModule tasks={tasks} onAdd={handleAddTask} onToggle={toggleTask} />;
       case OmniModule.INSIGHTS: return <InsightsModule data={pdsData} />;
-      case OmniModule.SYSTEM_LEDGER: return <SystemLedgerModule />;
+      case OmniModule.SYSTEM_LEDGER: return <SystemLedgerModule aiActive={aiActive} />;
       case OmniModule.IDENTITY: return <DashboardModule posts={posts} transactions={transactions} tasks={tasks} />;
       default: return <DashboardModule posts={posts} transactions={transactions} tasks={tasks} />;
     }
@@ -191,12 +203,25 @@ const App: React.FC = () => {
         <div className="px-3 pt-6 border-t border-gray-800">
           <div className="mt-4 p-4 rounded-xl bg-gradient-to-br from-gray-800 to-gray-900 hidden md:block border border-gray-700">
             <div className="flex items-center gap-2 mb-2">
-              <Database className="text-blue-400" size={16} />
-              <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">SQLite Active</span>
+              <Database className="text-blue-400" size={14} />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Ledger Status</span>
+            </div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                <span className="text-xs font-medium text-gray-300">Disk Ready</span>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2 mb-2">
+              {aiActive ? <Zap className="text-amber-400" size={14} /> : <ZapOff className="text-gray-600" size={14} />}
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">AI Engine</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500"></div>
-              <span className="text-sm font-medium text-green-500/80">Ledger Online</span>
+              <div className={`w-2 h-2 rounded-full ${aiActive ? 'bg-amber-400 animate-pulse' : 'bg-gray-700'}`}></div>
+              <span className={`text-xs font-medium ${aiActive ? 'text-amber-400' : 'text-gray-500'}`}>
+                {aiActive ? 'Gemini 3 Pro Active' : 'AI Offline'}
+              </span>
             </div>
           </div>
         </div>
