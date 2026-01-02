@@ -9,7 +9,10 @@ export enum OmniModule {
   SYSTEM_LEDGER = 'SYSTEM_LEDGER',
   VAULT = 'VAULT',
   PULSE = 'PULSE',
-  INVENTORY = 'INVENTORY'
+  INVENTORY = 'INVENTORY',
+  HEALTH = 'HEALTH',
+  WORKFLOWS = 'WORKFLOWS',
+  COMMAND_CENTER = 'COMMAND_CENTER'
 }
 
 export interface Asset {
@@ -65,6 +68,7 @@ export interface Transaction {
   date: string;
   description: string;
   recipient?: string;
+  contactId?: string; // Relational link
 }
 
 export interface ProjectTask {
@@ -72,4 +76,22 @@ export interface ProjectTask {
   title: string;
   status: 'todo' | 'doing' | 'done';
   priority: 'low' | 'medium' | 'high';
+  projectId?: string;
+}
+
+export interface HealthMetric {
+  id: string;
+  date: string;
+  type: 'Sleep' | 'HeartRate' | 'Energy' | 'Mood' | 'Weight';
+  value: number;
+  unit: string;
+}
+
+export interface WorkflowRule {
+  id: string;
+  name: string;
+  triggerType: 'TRANSACTION' | 'TASK_COMPLETE' | 'BIO_DROP';
+  condition: string;
+  action: string;
+  active: boolean;
 }

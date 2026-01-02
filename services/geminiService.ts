@@ -1,8 +1,4 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
-
-// Initialize the Gemini API client. process.env.API_KEY is handled by the platform or .env.local on the server.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const PRO_MODEL = 'gemini-3-pro-preview';
 
@@ -10,6 +6,8 @@ const PRO_MODEL = 'gemini-3-pro-preview';
  * Generates deep insights using the model's high thinking budget for complex reasoning.
  */
 export const getPersonalInsights = async (data: any) => {
+  // Fix: Initialize GoogleGenAI right before making the API call to ensure it uses the most up-to-date API key.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: PRO_MODEL,
     contents: `You are the OmniPDS Strategic Analyst. Analyze this unified data repository: ${JSON.stringify(data)}. 
@@ -48,6 +46,8 @@ export const getPersonalInsights = async (data: any) => {
  * Generates a comprehensive 30-day "Sovereign Roadmap" correlating all modules.
  */
 export const getSovereignRoadmap = async (data: any) => {
+  // Fix: Initialize GoogleGenAI right before making the API call.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: PRO_MODEL,
     contents: `Create a 30-day strategic roadmap based on these PDS records: ${JSON.stringify(data)}. 
@@ -80,6 +80,8 @@ export const getSovereignRoadmap = async (data: any) => {
 };
 
 export const chatWithPDS = async (history: { role: 'user' | 'model', parts: { text: string }[] }[], context: any) => {
+  // Fix: Initialize GoogleGenAI right before making the API call.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const chat = ai.chats.create({
     model: PRO_MODEL,
     config: {
