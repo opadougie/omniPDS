@@ -11,31 +11,39 @@ import os from 'os';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load environment variables
+// Load environment variables from .env.local
 const envPath = path.join(__dirname, '.env.local');
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });
 }
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+// Port explicitly set to 8087 as requested
+const PORT = process.env.PORT || 8087;
 const DB_FILE = path.join(__dirname, 'omnipds.sqlite');
 
-// Middleware
+// Middleware: Handle large binary SQLite exports (up to 50MB)
 app.use(bodyParser.raw({ type: 'application/octet-stream', limit: '50mb' }));
 app.use(express.static(__dirname));
 
-// Endpoint to provide environment variables to the frontend safely
+/**
+ * SECURE ENVIRONMENT INJECTION
+ * Injects the API_KEY into the client-side scope via window.process.env.
+ */
 app.get('/env.js', (req, res) => {
   res.set('Content-Type', 'application/javascript');
   res.send(`window.process = { env: { API_KEY: "${process.env.API_KEY || ''}" } };`);
 });
 
-// Advanced Health & Infrastructure API
+/**
+ * SYSTEM DIAGNOSTICS
+ * Returns hardware, process, and storage health metrics.
+ */
 app.get('/api/health', (req, res) => {
   const memUsed = process.memoryUsage();
   res.json({
     status: 'online',
+    timestamp: new Date().toISOString(),
     storage: {
       path: DB_FILE,
       exists: fs.existsSync(DB_FILE),
@@ -62,48 +70,68 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// PDS Data Persistence Endpoints
+/**
+ * PDS LOAD
+ * Serves the raw SQLite database file to the frontend.
+ */
 app.get('/api/pds/load', (req, res) => {
   if (fs.existsSync(DB_FILE)) {
     res.sendFile(DB_FILE);
   } else {
-    res.status(404).send('No DB found');
+    res.status(404).json({ error: 'Sovereign ledger not found on disk.' });
   }
 });
 
+/**
+ * PDS PERSIST
+ * Receives the SQLite binary from the client and commits it to disk.
+ */
 app.post('/api/pds/persist', (req, res) => {
   try {
+    if (!req.body || req.body.length === 0) {
+      throw new Error("Received empty binary stream.");
+    }
     fs.writeFileSync(DB_FILE, req.body);
+    console.log(`[OmniPDS] Persisted ${req.body.length} bytes to ${DB_FILE}`);
     res.sendStatus(200);
   } catch (e) {
     console.error('[OmniPDS] Persistence Failure:', e);
-    res.status(500).send(e.message);
+    res.status(500).json({ error: e.message });
   }
 });
 
-// SPA Fallback - Updated for Express 5 / path-to-regexp v6+ compatibility
-app.get('(.*)', (req, res) => {
+/**
+ * SPA FALLBACK
+ * Routes all non-API requests to index.html for client-side routing.
+ * Regex excludes any path starting with /api or specific files.
+ */
+app.get(/^(?!\/api|\/env\.js).*$/, (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Critical Startup Error Handling
+// Start Sovereign Core
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`
-  OmniPDS Sovereign Core
-  ----------------------
-  Status:  RUNNING
-  Port:    ${PORT}
-  Root:    ${__dirname}
-  AI:      ${process.env.API_KEY ? 'ACTIVE' : 'OFFLINE'}
-  ----------------------
+  =========================================
+  OmniPDS Sovereign Infrastructure Active
+  =========================================
+  Core Version: 1.2.0
+  Port:         ${PORT}
+  Environment:  ${process.env.NODE_ENV || 'Development'}
+  AI Gateway:   ${process.env.API_KEY ? 'CONNECTED' : 'STANDALONE'}
+  Storage:      ${DB_FILE}
+  =========================================
+  Local Access: http://localhost:${PORT}
+  =========================================
   `);
 });
 
+// Graceful error handling for port conflicts
 server.on('error', (e) => {
   if (e.code === 'EADDRINUSE') {
-    console.error(`[FATAL] Port ${PORT} occupied. OmniPDS cannot start.`);
+    console.error(`[FATAL] Port ${PORT} is occupied by another process.`);
   } else {
-    console.error('[FATAL] Unhandled Server Error:', e);
+    console.error('[FATAL] Unhandled System Exception:', e);
   }
   process.exit(1);
 });
