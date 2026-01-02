@@ -19,15 +19,16 @@ const app = express();
 const PORT = 8087;
 const DB_FILE = path.join(__dirname, 'omnipds.sqlite');
 
-// Manually set MIME types for TSX support in the browser
-express.static.mime.define({
-  'application/javascript': ['ts', 'tsx', 'jsx']
-});
+// Force application/javascript for .ts and .tsx files to satisfy strict MIME checking
+app.use(express.static(__dirname, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
 
 app.use(bodyParser.raw({ type: 'application/octet-stream', limit: '50mb' }));
-
-// Serve static files from the current directory
-app.use(express.static(__dirname));
 
 app.get('/env.js', (req, res) => {
   res.set('Content-Type', 'application/javascript');
@@ -83,7 +84,7 @@ app.post('/api/pds/persist', (req, res) => {
   }
 });
 
-// Improved SPA Catch-All: Only redirect if no file extension is present (e.g., /dashboard)
+// Improved SPA Catch-All
 app.get('*', (req, res) => {
   if (req.path.includes('.') || req.path.startsWith('/api')) {
     return res.status(404).send('Not found');

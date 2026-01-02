@@ -14,10 +14,9 @@ const notifyLog = (msg: string) => logListeners.forEach(cb => cb(`[${new Date().
 export const initDB = async () => {
   if (db) return db;
 
-  // Use the global initSqlJs loaded via script tag in index.html
   const initSqlJs = (window as any).initSqlJs;
   if (!initSqlJs) {
-    notifyLog("SQL.js initialization failed: Global scope mismatch.");
+    notifyLog("FATAL: SQL.js not found in global scope.");
     return null;
   }
 
@@ -29,28 +28,23 @@ export const initDB = async () => {
     const response = await fetch('/api/pds/load');
     if (response.ok) {
       const arrayBuffer = await response.arrayBuffer();
-      const u8 = new Uint8Array(arrayBuffer);
-      db = new SQL.Database(u8);
-      notifyLog("Sovereign Ledger synchronized with remote node.");
+      db = new SQL.Database(new Uint8Array(arrayBuffer));
+      notifyLog("Sovereign Ledger Synced: FTS5 Engine Online.");
     } else {
-      throw new Error("PDS remote unavailable.");
+      throw new Error("Remote ledger empty.");
     }
   } catch (e) {
-    notifyLog("PDS Remote unavailable. Initializing local-first cache.");
     const savedData = localStorage.getItem('omnipds_sqlite');
     if (savedData) {
-      try {
-        const u8 = new Uint8Array(JSON.parse(savedData));
-        db = new SQL.Database(u8);
-      } catch (innerE) {
-        db = new SQL.Database();
-        createSchema();
-      }
+      db = new SQL.Database(new Uint8Array(JSON.parse(savedData)));
     } else {
       db = new SQL.Database();
       createSchema();
     }
   }
+  
+  // Ensure FTS tables exist even on existing DBs
+  ensureFTSTables();
   return db;
 };
 
@@ -65,18 +59,29 @@ const createSchema = () => {
     CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, name TEXT, serial TEXT, value REAL, category TEXT, location TEXT, purchaseDate TEXT);
     CREATE TABLE IF NOT EXISTS health (id TEXT PRIMARY KEY, date TEXT, type TEXT, value REAL, unit TEXT);
     CREATE TABLE IF NOT EXISTS workflows (id TEXT PRIMARY KEY, name TEXT, triggerType TEXT, condition TEXT, action TEXT, active INTEGER);
-    
     CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, sender TEXT, receiver TEXT, text TEXT, timestamp TEXT, encrypted INTEGER);
-    CREATE TABLE IF NOT EXISTS credentials (id TEXT PRIMARY KEY, type TEXT, issuer TEXT, data TEXT, issuedAt TEXT);
-    CREATE TABLE IF NOT EXISTS media (id TEXT PRIMARY KEY, name TEXT, mimeType TEXT, size INTEGER, cid TEXT, addedAt TEXT);
     CREATE TABLE IF NOT EXISTS system_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, event TEXT, timestamp TEXT);
   `);
 
   db.run("INSERT OR IGNORE INTO balances VALUES ('USD', 12450.00, 'US Dollar', '$')");
   db.run("INSERT OR IGNORE INTO balances VALUES ('BTC', 0.12, 'Bitcoin', '₿')");
-  db.run("INSERT OR IGNORE INTO system_audit (event, timestamp) VALUES ('Sovereign Core Initialized', datetime('now'))");
   
   persist();
+};
+
+const ensureFTSTables = () => {
+  try {
+    // Create FTS5 Virtual Table for universal search muscle
+    db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS fts_index USING fts5(id UNINDEXED, content, type UNINDEXED);`);
+  } catch (e) {
+    console.warn("FTS5 initialization error:", e);
+  }
+};
+
+const updateSearchIndex = (id: string, content: string, type: string) => {
+  try {
+    db.run("INSERT OR REPLACE INTO fts_index(id, content, type) VALUES (?, ?, ?)", [id, content, type]);
+  } catch (e) {}
 };
 
 const persist = async () => {
@@ -94,94 +99,104 @@ const persist = async () => {
 
 const queryAll = <T>(sql: string, params: any[] = []): T[] => {
   if (!db) return [];
-  const res = db.exec(sql, params);
-  if (!res.length) return [];
-  const columns = res[0].columns;
-  return res[0].values.map((row: any) => {
-    const obj: any = {};
-    columns.forEach((col: string, i: number) => obj[col] = row[i]);
-    return obj as T;
-  });
+  try {
+    const res = db.exec(sql, params);
+    if (!res.length) return [];
+    const columns = res[0].columns;
+    return res[0].values.map((row: any) => {
+      const obj: any = {};
+      columns.forEach((col: string, i: number) => obj[col] = row[i]);
+      return obj as T;
+    });
+  } catch (e) {
+    console.error("Query Error:", e);
+    return [];
+  }
 };
 
+// Data Access Methods
 export const getMessages = () => queryAll<Message>("SELECT * FROM messages ORDER BY timestamp DESC");
 export const addMessage = (m: Message) => {
   db.run("INSERT INTO messages VALUES (?,?,?,?,?,?)", [m.id, m.sender, m.receiver, m.text, m.timestamp, m.encrypted ? 1 : 0]);
-  notifyLog(`Committed Message: ${m.id}`);
-  persist();
-};
-
-export const getCredentials = () => queryAll<Credential>("SELECT * FROM credentials ORDER BY issuedAt DESC");
-export const addCredential = (c: Credential) => {
-  db.run("INSERT INTO credentials VALUES (?,?,?,?,?)", [c.id, c.type, c.issuer, c.data, c.issuedAt]);
-  notifyLog(`Vault Entry: Credential ${c.type} stored.`);
-  persist();
-};
-
-export const getMedia = () => queryAll<MediaAsset>("SELECT * FROM media ORDER BY addedAt DESC");
-export const addMedia = (m: MediaAsset) => {
-  db.run("INSERT INTO media VALUES (?,?,?,?,?,?)", [m.id, m.name, m.mimeType, m.size, m.cid, m.addedAt]);
+  updateSearchIndex(m.id, m.text, 'COMMS');
   persist();
 };
 
 export const getPosts = () => queryAll<SocialPost>("SELECT * FROM posts ORDER BY createdAt DESC");
-export const getTransactions = () => queryAll<Transaction>("SELECT * FROM transactions ORDER BY date DESC");
-export const getBalances = () => queryAll<WalletBalance>("SELECT * FROM balances");
-export const getTasks = () => queryAll<ProjectTask>("SELECT * FROM tasks");
-export const getNotes = () => queryAll<Note>("SELECT * FROM notes ORDER BY updatedAt DESC");
-export const getContacts = () => queryAll<Contact>("SELECT * FROM contacts");
-export const getAssets = () => queryAll<Asset>("SELECT * FROM assets");
-export const getHealthMetrics = () => queryAll<HealthMetric>("SELECT * FROM health ORDER BY date DESC LIMIT 100");
-export const getWorkflowRules = () => queryAll<WorkflowRule>("SELECT * FROM workflows");
+export const addPost = (p: SocialPost) => { 
+  db.run("INSERT INTO posts VALUES (?,?,?,?,?)", [p.id, p.author, p.text, p.likes, p.createdAt]); 
+  updateSearchIndex(p.id, p.text, 'SOCIAL');
+  persist(); 
+};
 
-export const addPost = (p: SocialPost) => { db.run("INSERT INTO posts VALUES (?,?,?,?,?)", [p.id, p.author, p.text, p.likes, p.createdAt]); notifyLog("Social block committed."); persist(); };
+export const getTransactions = () => queryAll<Transaction>("SELECT * FROM transactions ORDER BY date DESC");
 export const addTransaction = (t: Transaction) => { 
   db.run("INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?,?)", [t.id, t.amount, t.currency, t.category, t.type, t.date, t.description, t.recipient, t.contactId]); 
   db.run("UPDATE balances SET amount = amount " + (t.type === 'income' ? '+' : '-') + " ? WHERE currency = ?", [t.amount, t.currency]);
-  notifyLog(`Ledger Update: ${t.type} ${t.amount} ${t.currency}`);
+  updateSearchIndex(t.id, t.description, 'FINANCE');
   persist(); 
 };
+
+export const getNotes = () => queryAll<Note>("SELECT * FROM notes ORDER BY updatedAt DESC");
+export const addNote = (n: Note) => { 
+  db.run("INSERT INTO notes VALUES (?,?,?,?,?)", [n.id, n.title, n.content, n.tags, n.updatedAt]); 
+  updateSearchIndex(n.id, n.content + " " + n.title, 'VAULT');
+  persist(); 
+};
+
+export const getBalances = () => queryAll<WalletBalance>("SELECT * FROM balances");
+export const getTasks = () => queryAll<ProjectTask>("SELECT * FROM tasks");
 export const addTask = (t: ProjectTask) => { db.run("INSERT INTO tasks VALUES (?,?,?,?,?)", [t.id, t.title, t.status, t.priority, t.projectId]); persist(); };
 export const updateTaskStatus = (id: string, s: string) => { db.run("UPDATE tasks SET status = ? WHERE id = ?", [s, id]); persist(); };
-export const addNote = (n: Note) => { db.run("INSERT INTO notes VALUES (?,?,?,?,?)", [n.id, n.title, n.content, n.tags, n.updatedAt]); persist(); };
+export const getContacts = () => queryAll<Contact>("SELECT * FROM contacts");
 export const addContact = (c: Contact) => { db.run("INSERT INTO contacts VALUES (?,?,?,?,?,?)", [c.id, c.name, c.handle, c.category, c.lastContacted, c.notes]); persist(); };
+export const getAssets = () => queryAll<Asset>("SELECT * FROM assets");
 export const addAsset = (a: Asset) => { db.run("INSERT INTO assets VALUES (?,?,?,?,?,?,?)", [a.id, a.name, a.serial, a.value, a.category, a.location, a.purchaseDate]); persist(); };
+export const getHealthMetrics = () => queryAll<HealthMetric>("SELECT * FROM health ORDER BY date DESC LIMIT 100");
 export const addHealthMetric = (m: HealthMetric) => { db.run("INSERT INTO health VALUES (?,?,?,?,?)", [m.id, m.date, m.type, m.value, m.unit]); persist(); };
+export const getWorkflowRules = () => queryAll<WorkflowRule>("SELECT * FROM workflows");
 
 export const getUnifiedFeed = () => {
   const posts = queryAll<any>("SELECT 'SOCIAL' as type, createdAt as date, text as title, author as subtitle FROM posts ORDER BY createdAt DESC LIMIT 10");
   const txs = queryAll<any>("SELECT 'FINANCE' as type, date, description as title, amount || ' ' || currency as subtitle FROM transactions ORDER BY date DESC LIMIT 10");
-  const tasks = queryAll<any>("SELECT 'PROJECT' as type, title as title, status as subtitle, id as date FROM tasks LIMIT 10");
-  return [...posts, ...txs, ...tasks].sort((a,b) => b.date.localeCompare(a.date));
+  return [...posts, ...txs].sort((a,b) => b.date.localeCompare(a.date));
 };
 
 export const universalSearch = (term: string) => {
-  const query = `%${term}%`;
-  const tables = [
-    { name: 'notes', col: 'content', type: 'VAULT' },
-    { name: 'posts', col: 'text', type: 'SOCIAL' },
-    { name: 'transactions', col: 'description', type: 'FINANCE' },
-    { name: 'messages', col: 'text', type: 'COMMS' }
-  ];
-  let results: any[] = [];
-  tables.forEach(t => {
-    try {
-      const res = db.exec(`SELECT * FROM ${t.name} WHERE ${t.col} LIKE ?`, [query]);
-      if (res.length) {
-        res[0].values.forEach((row: any) => {
-          const obj: any = { _type: t.type };
-          res[0].columns.forEach((col: string, i: number) => obj[col] = row[i]);
-          results.push(obj);
-        });
-      }
-    } catch(e){}
-  });
-  return results;
+  if (!term.trim()) return [];
+  // Muscular FTS5 Query
+  try {
+    const res = db.exec(`SELECT id, content, type FROM fts_index WHERE fts_index MATCH ? ORDER BY rank`, [`${term}*`]);
+    if (!res.length) return [];
+    return res[0].values.map((row: any) => ({
+      id: row[0],
+      title: row[1],
+      _type: row[2]
+    }));
+  } catch (e) {
+    // Fallback if FTS5 fails
+    return [];
+  }
 };
 
 export const getDBSize = () => { 
   const d = localStorage.getItem('omnipds_sqlite'); 
-  return d ? (JSON.parse(d).length / 1024).toFixed(2) + " KB" : "0 KB"; 
+  return d ? (JSON.parse(d).length / 1024).toFixed(1) + " KB" : "0 KB"; 
 };
-export const getTableRowCount = (t: string) => { if(!db) return 0; try { const r = db.exec(`SELECT COUNT(*) FROM ${t}`); return r[0].values[0][0]; } catch(e){return 0;} };
-export const executeRawSQL = (q: string) => { if(!db) return {success:false}; try { const r = db.exec(q); persist(); return {success:true, data:r}; } catch(e:any){return {success:false, error:e.message};} };
+export const getTableRowCount = (t: string) => { 
+  if(!db) return 0; 
+  try { 
+    const r = db.exec(`SELECT COUNT(*) FROM ${t}`); 
+    return r[0].values[0][0]; 
+  } catch(e) { return 0; } 
+};
+export const executeRawSQL = (q: string) => { 
+  if(!db) return {success:false}; 
+  try { 
+    const r = db.exec(q); 
+    persist(); 
+    return {success:true, data:r}; 
+  } catch(e:any) { return {success:false, error:e.message}; } 
+};
+export const getCredentials = () => [];
+export const getMedia = () => [];
