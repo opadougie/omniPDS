@@ -1,5 +1,5 @@
 
-import { SocialPost, Transaction, ProjectTask, WalletBalance, Note, Contact } from '../types';
+import { SocialPost, Transaction, ProjectTask, WalletBalance, Note, Contact, Asset } from '../types';
 
 let db: any = null;
 
@@ -43,6 +43,7 @@ const createSchema = () => {
     CREATE TABLE IF NOT EXISTS balances (currency TEXT PRIMARY KEY, amount REAL, label TEXT, symbol TEXT);
     CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, title TEXT, content TEXT, tags TEXT, updatedAt TEXT);
     CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT, handle TEXT, category TEXT, lastContacted TEXT, notes TEXT);
+    CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, name TEXT, serial TEXT, value REAL, category TEXT, location TEXT, purchaseDate TEXT);
   `);
 
   db.run("INSERT OR IGNORE INTO balances VALUES ('USD', 8450.20, 'US Dollar', '$')");
@@ -61,9 +62,7 @@ const persist = async () => {
       headers: { 'Content-Type': 'application/octet-stream' },
       body: binary
     });
-  } catch (e) {
-    console.warn("OmniPDS Persistence failed.");
-  }
+  } catch (e) {}
 };
 
 export const getDBSize = () => {
@@ -75,9 +74,25 @@ export const getTableRowCount = (table: string): number => {
   try {
     const res = db.exec(`SELECT COUNT(*) FROM ${table}`);
     return res[0].values[0][0];
-  } catch (e) {
-    return 0;
-  }
+  } catch (e) { return 0; }
+};
+
+// ASSETS
+export const getAssets = (): Asset[] => {
+  const res = db.exec("SELECT * FROM assets ORDER BY purchaseDate DESC");
+  if (!res.length) return [];
+  const columns = res[0].columns;
+  return res[0].values.map((row: any) => {
+    const obj: any = {};
+    columns.forEach((col: string, i: number) => obj[col] = row[i]);
+    return obj as Asset;
+  });
+};
+
+export const addAsset = (asset: Asset) => {
+  db.run("INSERT INTO assets (id, name, serial, value, category, location, purchaseDate) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [asset.id, asset.name, asset.serial, asset.value, asset.category, asset.location, asset.purchaseDate]);
+  persist();
 };
 
 // NOTES
@@ -116,7 +131,7 @@ export const addContact = (contact: Contact) => {
   persist();
 };
 
-// EXISTING
+// POSTS, TRANSACTIONS, TASKS
 export const getPosts = (): SocialPost[] => {
   const res = db.exec("SELECT * FROM posts ORDER BY createdAt DESC");
   if (!res.length) return [];

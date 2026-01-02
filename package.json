@@ -13,7 +13,13 @@
     "@google/genai": "^1.34.0",
     "react-dom": "^19.2.3",
     "lucide-react": "^0.562.0",
-    "recharts": "^3.6.0"
+    "recharts": "^3.6.0",
+    "path": "^0.12.7",
+    "express": "^5.2.1",
+    "fs": "^0.0.1-security",
+    "url": "^0.11.4",
+    "body-parser": "^2.2.1",
+    "dotenv": "^17.2.3"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

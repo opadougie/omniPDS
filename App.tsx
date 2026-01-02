@@ -2,9 +2,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutDashboard, Users, Wallet as WalletIcon, Briefcase, Sparkles, Settings, 
-  CreditCard, Globe, Copy, Check, Database, Terminal, Zap, ZapOff, BookOpen, UserPlus 
+  CreditCard, Globe, Copy, Check, Database, Terminal, Zap, ZapOff, BookOpen, UserPlus, Box 
 } from 'lucide-react';
-import { OmniModule, SocialPost, Transaction, ProjectTask, WalletBalance, Note, Contact } from './types';
+import { OmniModule, SocialPost, Transaction, ProjectTask, WalletBalance, Note, Contact, Asset } from './types';
 import SidebarItem from './components/SidebarItem';
 import SocialModule from './components/SocialModule';
 import FinanceModule from './components/FinanceModule';
@@ -15,6 +15,7 @@ import WalletModule from './components/WalletModule';
 import SystemLedgerModule from './components/SystemLedgerModule';
 import VaultModule from './components/VaultModule';
 import PulseModule from './components/PulseModule';
+import InventoryModule from './components/InventoryModule';
 import * as dbService from './services/dbService';
 
 const DEFAULT_CATEGORIES = ['Salary', 'Food', 'Groceries', 'Rent', 'Investments', 'Entertainment', 'Utilities', 'Transfer', 'Shopping', 'Travel'];
@@ -32,10 +33,11 @@ const App: React.FC = () => {
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
 
   const pdsData = useMemo(() => ({
-    posts, transactions, balances, tasks, notes, contacts
-  }), [posts, transactions, balances, tasks, notes, contacts]);
+    posts, transactions, balances, tasks, notes, contacts, assets
+  }), [posts, transactions, balances, tasks, notes, contacts, assets]);
 
   useEffect(() => {
     let mounted = true;
@@ -65,6 +67,7 @@ const App: React.FC = () => {
     setTasks(dbService.getTasks());
     setNotes(dbService.getNotes());
     setContacts(dbService.getContacts());
+    setAssets(dbService.getAssets());
   };
 
   const addPost = (text: string) => {
@@ -92,6 +95,11 @@ const App: React.FC = () => {
     refreshData();
   };
 
+  const handleAddAsset = (asset: Omit<Asset, 'id'>) => {
+    dbService.addAsset({ ...asset, id: Date.now().toString() });
+    refreshData();
+  };
+
   const renderModule = () => {
     switch (activeModule) {
       case OmniModule.SOCIAL: return <SocialModule posts={posts} onAddPost={addPost} />;
@@ -100,13 +108,14 @@ const App: React.FC = () => {
       case OmniModule.PROJECTS: return <ProjectModule tasks={tasks} onAdd={handleAddTask} onToggle={(id) => { const t = tasks.find(x => x.id === id); if(t) dbService.updateTaskStatus(id, t.status === 'done' ? 'todo' : 'done'); refreshData(); }} />;
       case OmniModule.VAULT: return <VaultModule notes={notes} onAdd={handleAddNote} />;
       case OmniModule.PULSE: return <PulseModule contacts={contacts} onAdd={handleAddContact} />;
+      case OmniModule.INVENTORY: return <InventoryModule assets={assets} onAdd={handleAddAsset} />;
       case OmniModule.INSIGHTS: return <InsightsModule data={pdsData} />;
       case OmniModule.SYSTEM_LEDGER: return <SystemLedgerModule aiActive={aiActive} />;
       default: return <DashboardModule posts={posts} transactions={transactions} tasks={tasks} />;
     }
   };
 
-  if (!dbReady) return <div className="h-screen bg-[#030712] flex items-center justify-center font-bold text-blue-500 animate-pulse">Initializing Sovereign Ledger...</div>;
+  if (!dbReady) return <div className="h-screen bg-[#030712] flex items-center justify-center font-bold text-blue-500 animate-pulse uppercase tracking-widest">Booting OmniPDS Core...</div>;
 
   return (
     <div className="flex h-screen bg-[#030712] overflow-hidden text-gray-100">
@@ -117,34 +126,33 @@ const App: React.FC = () => {
         </div>
         <div className="flex-1 space-y-1 px-3 overflow-y-auto custom-scrollbar">
           <SidebarItem icon={<LayoutDashboard />} label="Dashboard" active={activeModule === OmniModule.IDENTITY} onClick={() => setActiveModule(OmniModule.IDENTITY)} />
-          <SidebarItem icon={<Users />} label="Social" active={activeModule === OmniModule.SOCIAL} onClick={() => setActiveModule(OmniModule.SOCIAL)} />
-          <SidebarItem icon={<BookOpen />} label="The Vault" active={activeModule === OmniModule.VAULT} onClick={() => setActiveModule(OmniModule.VAULT)} />
-          <SidebarItem icon={<UserPlus />} label="The Pulse" active={activeModule === OmniModule.PULSE} onClick={() => setActiveModule(OmniModule.PULSE)} />
-          <SidebarItem icon={<CreditCard />} label="Wallet" active={activeModule === OmniModule.WALLET} onClick={() => setActiveModule(OmniModule.WALLET)} />
-          <SidebarItem icon={<WalletIcon />} label="Finance" active={activeModule === OmniModule.FINANCE} onClick={() => setActiveModule(OmniModule.FINANCE)} />
-          <SidebarItem icon={<Briefcase />} label="Tasks" active={activeModule === OmniModule.PROJECTS} onClick={() => setActiveModule(OmniModule.PROJECTS)} />
+          <SidebarItem icon={<Users />} label="Social Hub" active={activeModule === OmniModule.SOCIAL} onClick={() => setActiveModule(OmniModule.SOCIAL)} />
+          <SidebarItem icon={<BookOpen />} label="Vault" active={activeModule === OmniModule.VAULT} onClick={() => setActiveModule(OmniModule.VAULT)} />
+          <SidebarItem icon={<Box />} label="Assets" active={activeModule === OmniModule.INVENTORY} onClick={() => setActiveModule(OmniModule.INVENTORY)} />
+          <SidebarItem icon={<UserPlus />} label="Pulse" active={activeModule === OmniModule.PULSE} onClick={() => setActiveModule(OmniModule.PULSE)} />
+          <SidebarItem icon={<CreditCard />} label="E-Wallet" active={activeModule === OmniModule.WALLET} onClick={() => setActiveModule(OmniModule.WALLET)} />
+          <SidebarItem icon={<WalletIcon />} label="Ledger" active={activeModule === OmniModule.FINANCE} onClick={() => setActiveModule(OmniModule.FINANCE)} />
+          <SidebarItem icon={<Briefcase />} label="Mission" active={activeModule === OmniModule.PROJECTS} onClick={() => setActiveModule(OmniModule.PROJECTS)} />
           <SidebarItem icon={<Sparkles />} label="Insights" active={activeModule === OmniModule.INSIGHTS} onClick={() => setActiveModule(OmniModule.INSIGHTS)} />
-          <SidebarItem icon={<Terminal />} label="System" active={activeModule === OmniModule.SYSTEM_LEDGER} onClick={() => setActiveModule(OmniModule.SYSTEM_LEDGER)} />
+          <SidebarItem icon={<Terminal />} label="Root" active={activeModule === OmniModule.SYSTEM_LEDGER} onClick={() => setActiveModule(OmniModule.SYSTEM_LEDGER)} />
         </div>
         <div className="px-4 mt-auto">
           <div className={`p-4 rounded-xl border ${aiActive ? 'border-amber-500/20 bg-amber-500/5' : 'border-gray-800 bg-gray-900'} hidden md:block`}>
-            <div className="flex items-center gap-2 mb-1">
-              {aiActive ? <Zap className="text-amber-400" size={14} /> : <ZapOff className="text-gray-600" size={14} />}
-              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">AI Status</span>
+            <p className={`text-[10px] font-black uppercase mb-1 ${aiActive ? 'text-amber-500' : 'text-gray-500'}`}>{aiActive ? 'Gemini Engine Prime' : 'Engine Offline'}</p>
+            <div className={`h-1.5 w-full rounded-full bg-gray-800 overflow-hidden`}>
+              <div className={`h-full ${aiActive ? 'bg-amber-400 w-full animate-pulse' : 'bg-gray-700 w-0'}`}></div>
             </div>
-            <p className={`text-xs ${aiActive ? 'text-amber-400 font-bold' : 'text-gray-500'}`}>{aiActive ? 'Gemini 3 Pro Active' : 'AI Offline'}</p>
           </div>
         </div>
       </nav>
       <main className="flex-1 overflow-y-auto bg-[#030712] custom-scrollbar">
         <header className="h-16 border-b border-gray-800 bg-[#030712]/80 backdrop-blur-md px-8 flex items-center justify-between sticky top-0 z-20">
-          <h2 className="font-bold text-lg capitalize">{activeModule.toLowerCase().replace('_', ' ')}</h2>
+          <h2 className="font-bold text-lg capitalize tracking-tight">{activeModule.toLowerCase().replace('_', ' ')}</h2>
           <div className="flex items-center gap-4">
             <button onClick={() => { navigator.clipboard.writeText("did:plc:omni8927"); setCopied(true); setTimeout(()=>setCopied(false),2000); }} className="px-4 py-1.5 bg-gray-900 border border-gray-800 rounded-full text-[10px] flex items-center gap-2 hover:bg-gray-800 transition-all">
               <span className="text-gray-500">DID:</span><span className="text-blue-400 font-mono">omni8927</span>
               {copied ? <Check size={12} className="text-green-500"/> : <Copy size={12} className="text-gray-600"/>}
             </button>
-            <img src="https://picsum.photos/seed/user123/40/40" className="w-10 h-10 rounded-full border-2 border-gray-800" alt="Avatar" />
           </div>
         </header>
         <div className="p-8 max-w-7xl mx-auto">{renderModule()}</div>

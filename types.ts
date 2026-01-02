@@ -8,7 +8,18 @@ export enum OmniModule {
   WALLET = 'WALLET',
   SYSTEM_LEDGER = 'SYSTEM_LEDGER',
   VAULT = 'VAULT',
-  PULSE = 'PULSE'
+  PULSE = 'PULSE',
+  INVENTORY = 'INVENTORY'
+}
+
+export interface Asset {
+  id: string;
+  name: string;
+  serial?: string;
+  value: number;
+  category: string;
+  location: string;
+  purchaseDate: string;
 }
 
 export interface Note {

@@ -1,14 +1,19 @@
 
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const bodyParser = require('body-parser');
+import express from 'express';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import bodyParser from 'body-parser';
+import dotenv from 'dotenv';
 
-// Load environment variables from .env.local if it exists
-// Note: systemd's EnvironmentFile also loads these, but this allows local 'node server.js' to work too.
+// Fix for __dirname in ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables
 const envPath = path.join(__dirname, '.env.local');
 if (fs.existsSync(envPath)) {
-    require('dotenv').config({ path: envPath });
+    dotenv.config({ path: envPath });
 }
 
 const app = express();
@@ -22,7 +27,6 @@ app.use(express.static(__dirname));
 // Endpoint to provide environment variables to the frontend safely
 app.get('/env.js', (req, res) => {
     res.set('Content-Type', 'application/javascript');
-    // Sanitize output - only send the key, not the whole process.env
     res.send(`window.process = { env: { API_KEY: "${process.env.API_KEY || ''}" } };`);
 });
 
@@ -41,7 +45,6 @@ app.get('/api/health', (req, res) => {
 // Load DB from Disk
 app.get('/api/pds/load', (req, res) => {
     if (fs.existsSync(DB_FILE)) {
-        console.log(`[OmniPDS] Serving ledger to client: ${req.ip}`);
         res.sendFile(DB_FILE);
     } else {
         res.status(404).send('No DB found');
@@ -52,8 +55,6 @@ app.get('/api/pds/load', (req, res) => {
 app.post('/api/pds/persist', (req, res) => {
     try {
         fs.writeFileSync(DB_FILE, req.body);
-        const size = (req.body.length / 1024).toFixed(2);
-        console.log(`[OmniPDS] Ledger committed: ${size}KB at ${new Date().toISOString()}`);
         res.sendStatus(200);
     } catch (e) {
         console.error('[OmniPDS] Persistence Error:', e);
@@ -61,32 +62,17 @@ app.post('/api/pds/persist', (req, res) => {
     }
 });
 
-// Serve index.html for all other routes (SPA support)
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Start Server with error handling
 const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`
-    ========================================
-    OmniPDS - Universal Data Protocol Active
-    ========================================
-    Status:   PRIMED
-    Port:     ${PORT}
-    Ledger:   ${DB_FILE}
-    AI:       ${process.env.API_KEY ? 'ENABLED (Gemini 3 Pro)' : 'DISABLED (Check .env.local)'}
-    Process:  ${process.pid}
-    ========================================
-    `);
+    console.log(`[OmniPDS] Relay Active on Port ${PORT}`);
 });
 
 server.on('error', (e) => {
     if (e.code === 'EADDRINUSE') {
-        console.error(`[FATAL] Port ${PORT} is already in use by another process.`);
-        process.exit(1);
-    } else {
-        console.error('[FATAL] Server error:', e);
+        console.error(`[FATAL] Port ${PORT} occupied.`);
         process.exit(1);
     }
 });
