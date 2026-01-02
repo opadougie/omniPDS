@@ -52,16 +52,21 @@ const App: React.FC = () => {
     let mounted = true;
     const loadDB = async () => {
       await dbService.initDB();
-      // Check server health to confirm AI Key presence
-      try {
-        const health = await fetch('/api/health').then(r => r.json());
-        if (mounted) setAiActive(health.ai_active);
-      } catch (e) {
-        // Fallback to client check
-        if (mounted) setAiActive(!!(window as any).process?.env?.API_KEY);
+      
+      // Determine if AI is active by checking system environment or server health
+      let keyDetected = !!process.env.API_KEY;
+      
+      if (!keyDetected) {
+        try {
+          const health = await fetch('/api/health').then(r => r.json());
+          keyDetected = health.ai_active;
+        } catch (e) {
+          // Silent catch for local-only preview
+        }
       }
 
       if (mounted) {
+        setAiActive(keyDetected);
         refreshData();
         setDbReady(true);
       }

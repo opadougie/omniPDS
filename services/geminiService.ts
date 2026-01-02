@@ -1,7 +1,7 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Initialize the Gemini API client with the high-performance Pro model
+// Initialize the Gemini API client. process.env.API_KEY is handled by the platform or .env.local on the server.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 const PRO_MODEL = 'gemini-3-pro-preview';
@@ -17,7 +17,7 @@ export const getPersonalInsights = async (data: any) => {
     Provide 3 high-impact strategic insights.`,
     config: {
       temperature: 1,
-      thinkingConfig: { thinkingBudget: 32768 }, // Maximize reasoning capability
+      thinkingConfig: { thinkingBudget: 32768 },
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -31,7 +31,7 @@ export const getPersonalInsights = async (data: any) => {
                 category: { type: Type.STRING },
                 description: { type: Type.STRING },
                 impact: { type: Type.STRING },
-                urgency: { type: Type.STRING, description: "Scale of 1-10" }
+                urgency: { type: Type.STRING }
               },
               required: ["title", "category", "description", "impact", "urgency"]
             }
@@ -88,7 +88,7 @@ export const chatWithPDS = async (history: { role: 'user' | 'model', parts: { te
       Your primary goal is to help the user achieve complete data and financial sovereignty.
       Be highly analytical, strategic, and capable of complex multi-module cross-referencing.
       Context: ${JSON.stringify(context)}`,
-      thinkingConfig: { thinkingBudget: 16000 } // Reserve significant budget for chat reasoning
+      thinkingConfig: { thinkingBudget: 16000 }
     }
   });
 
