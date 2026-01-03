@@ -32,6 +32,7 @@ export const initDB = async () => {
   }
   
   ensureFTSTables();
+  verifyIntegrity();
   return db;
 };
 
@@ -63,9 +64,15 @@ const ensureFTSTables = () => {
   } catch (e) {}
 };
 
-/**
- * Universal Sync to FTS5 Search Table
- */
+const verifyIntegrity = () => {
+  try {
+    const check = db.exec("PRAGMA integrity_check");
+    notifyLog(`Integrity: ${check[0].values[0][0]}`);
+  } catch (e) {
+    notifyLog("Integrity Check Failed: Re-indexing suggested.");
+  }
+};
+
 const syncToIndex = (id: string, content: string, type: string) => {
   try { 
     db.run("INSERT OR REPLACE INTO fts_ledger(id, content, type) VALUES (?, ?, ?)", [id, content, type]); 

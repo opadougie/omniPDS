@@ -3,7 +3,8 @@ import React from 'react';
 import { OmniModule } from '../types';
 import { 
   Activity, ShieldCheck, Database, Globe, CreditCard, 
-  Zap, ExternalLink, Target, TrendingUp, Clock, AlertTriangle, Search
+  Zap, ExternalLink, Target, TrendingUp, Clock, AlertTriangle, Search,
+  Briefcase, MessageSquare, Fingerprint, BookOpen, LayoutDashboard
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
@@ -31,34 +32,45 @@ const CommandCenter: React.FC<CommandCenterProps> = ({ feed, stats, onNavigate }
     { label: 'Node Uptime', value: '99.9%', icon: <Zap />, color: 'text-amber-400', bg: 'bg-amber-400/5', border: 'border-amber-400/20' },
   ];
 
+  const quickActions = [
+    { label: 'Finance', icon: <CreditCard />, module: OmniModule.FINANCE, color: 'text-emerald-400' },
+    { label: 'Mission', icon: <Briefcase />, module: OmniModule.PROJECTS, color: 'text-blue-400' },
+    { label: 'Comms', icon: <MessageSquare />, module: OmniModule.COMMS, color: 'text-indigo-400' },
+    { label: 'Vault', icon: <BookOpen />, module: OmniModule.VAULT, color: 'text-amber-400' },
+    { label: 'Pulse', icon: <Activity />, module: OmniModule.PULSE, color: 'text-rose-400' },
+    { label: 'Bio', icon: <Target />, module: OmniModule.HEALTH, color: 'text-cyan-400' },
+  ];
+
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
+      {/* Sovereign Highlights */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {highlights.map((h, i) => (
-          <div key={i} className={`p-6 rounded-3xl border ${h.bg} ${h.border} transition-transform hover:scale-[1.02] cursor-default shadow-sm`}>
-            <div className={`mb-4 ${h.color}`}>{React.cloneElement(h.icon as React.ReactElement<{ size?: number }>, { size: 24 })}</div>
+          <div key={i} className={`p-6 rounded-3xl border ${h.bg} ${h.border} transition-transform hover:scale-[1.02] cursor-default shadow-sm group`}>
+            <div className={`mb-4 ${h.color} group-hover:scale-110 transition-transform`}>{React.cloneElement(h.icon as React.ReactElement<{ size?: number }>, { size: 24 })}</div>
             <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest">{h.label}</p>
-            <h4 className="text-3xl font-black mt-1 tracking-tight">{h.value}</h4>
+            <h4 className="text-3xl font-black mt-1 tracking-tight text-white">{h.value}</h4>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-8">
-          <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 shadow-2xl relative overflow-hidden">
+          {/* Main Visualizer */}
+          <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 shadow-2xl relative overflow-hidden muscle-pulse">
              <div className="flex items-center justify-between mb-8">
                 <div>
-                  <h3 className="text-2xl font-black tracking-tight">Biometric & Activity Correlation</h3>
-                  <p className="text-gray-500 text-sm">Visualizing performance delta across dynamic intervals.</p>
+                  <h3 className="text-2xl font-black tracking-tight text-white">Neural Load & Correlation</h3>
+                  <p className="text-gray-500 text-sm">Synchronizing social reach, financial burn, and bio-matrix flux.</p>
                 </div>
-                <div className="flex gap-4">
+                <div className="hidden sm:flex gap-4">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                    <span className="text-[10px] font-bold text-gray-500 uppercase">Activity</span>
+                    <span className="text-[10px] font-bold text-gray-500 uppercase">Compute</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                    <span className="text-[10px] font-bold text-gray-500 uppercase">Health</span>
+                    <span className="text-[10px] font-bold text-gray-500 uppercase">Integrity</span>
                   </div>
                 </div>
              </div>
@@ -88,36 +100,43 @@ const CommandCenter: React.FC<CommandCenterProps> = ({ feed, stats, onNavigate }
              </div>
           </div>
 
+          {/* Quick Access Muscle Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
+             {quickActions.map((action, i) => (
+               <button 
+                 key={i} 
+                 onClick={() => onNavigate(action.module)}
+                 className="flex flex-col items-center justify-center p-6 bg-[#080b12] border border-gray-900 rounded-[2rem] hover:bg-blue-600/10 hover:border-blue-500/30 transition-all group active:scale-95"
+               >
+                  <div className={`mb-3 ${action.color} group-hover:scale-110 transition-transform`}>
+                    {React.cloneElement(action.icon as React.ReactElement<{ size?: number }>, { size: 28 })}
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-gray-500 group-hover:text-blue-400">{action.label}</span>
+               </button>
+             ))}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900">
-               <h4 className="text-lg font-bold mb-6 flex items-center gap-3">
-                  <Target className="text-blue-500" size={20} /> Sovereign Targets
+               <h4 className="text-lg font-bold mb-6 flex items-center gap-3 text-white">
+                  <Target className="text-blue-500" size={20} /> Mission Critical
                </h4>
                <div className="space-y-6">
                   <div>
                     <div className="flex justify-between text-xs font-bold mb-2 uppercase tracking-tighter">
-                      <span className="text-gray-400">Ledger Density</span>
-                      <span className="text-blue-400">Optimized</span>
+                      <span className="text-gray-400">Database Saturation</span>
+                      <span className="text-blue-400">92% Muscle</span>
                     </div>
                     <div className="h-2 w-full bg-gray-950 rounded-full overflow-hidden">
                       <div className="h-full bg-blue-600 rounded-full" style={{width: '92%'}}></div>
                     </div>
                   </div>
-                  <div>
-                    <div className="flex justify-between text-xs font-bold mb-2 uppercase tracking-tighter">
-                      <span className="text-gray-400">FTS Search Latency</span>
-                      <span className="text-green-400">&lt; 1ms</span>
-                    </div>
-                    <div className="h-2 w-full bg-gray-950 rounded-full overflow-hidden">
-                      <div className="h-full bg-green-600 rounded-full" style={{width: '100%'}}></div>
-                    </div>
-                  </div>
-                  <button onClick={() => onNavigate(OmniModule.PROJECTS)} className="w-full py-4 bg-gray-900 hover:bg-gray-800 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all">Audit Mission Progress</button>
+                  <button onClick={() => onNavigate(OmniModule.PROJECTS)} className="w-full py-4 bg-gray-900 hover:bg-gray-800 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all text-gray-300">View Active Milestones</button>
                </div>
             </div>
             <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900">
-               <h4 className="text-lg font-bold mb-6 flex items-center gap-3">
-                  <TrendingUp className="text-indigo-400" size={20} /> Data Yield
+               <h4 className="text-lg font-bold mb-6 flex items-center gap-3 text-white">
+                  <TrendingUp className="text-indigo-400" size={20} /> Economic Flux
                </h4>
                <div className="h-40 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -126,27 +145,17 @@ const CommandCenter: React.FC<CommandCenterProps> = ({ feed, stats, onNavigate }
                     </BarChart>
                   </ResponsiveContainer>
                </div>
-               <div className="flex justify-between mt-6">
-                 <div className="text-center">
-                   <p className="text-[10px] text-gray-500 font-bold uppercase">Stored</p>
-                   <p className="font-black text-white">{stats.posts.length + stats.transactions.length} Units</p>
-                 </div>
-                 <div className="text-center">
-                   <p className="text-[10px] text-gray-500 font-bold uppercase">Index</p>
-                   <p className="font-black text-indigo-400">Linear</p>
-                 </div>
-               </div>
             </div>
           </div>
         </div>
 
         <div className="lg:col-span-4 space-y-8">
-           <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 flex flex-col h-[760px]">
+           <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 flex flex-col h-[820px] shadow-xl">
               <div className="flex items-center justify-between mb-8">
-                 <h4 className="text-xl font-black">Sovereign Pulse</h4>
+                 <h4 className="text-xl font-black text-white">Life Firehose</h4>
                  <div className="px-3 py-1 bg-gray-950 border border-gray-800 rounded-full flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-                    <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Active</span>
+                    <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Live Sync</span>
               </div>
               </div>
               
@@ -154,7 +163,7 @@ const CommandCenter: React.FC<CommandCenterProps> = ({ feed, stats, onNavigate }
                 {feed.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center px-6 text-gray-600 italic">
                      <Clock size={32} className="mb-4 opacity-10" />
-                     <p className="text-sm">Initializing life firehose. Data muscle is ready.</p>
+                     <p className="text-sm">Mounting ledger streams...</p>
                   </div>
                 ) : (
                   feed.map((item, idx) => (
@@ -166,7 +175,7 @@ const CommandCenter: React.FC<CommandCenterProps> = ({ feed, stats, onNavigate }
                           }`}>
                             {item.type}
                           </span>
-                          <span className="text-[9px] text-gray-600 font-mono">Sync: OK</span>
+                          <span className="text-[9px] text-gray-600 font-mono">Verified</span>
                        </div>
                        <p className="text-sm font-bold text-gray-200 truncate">{item.title}</p>
                        <p className="text-[10px] text-gray-500 mt-1">{item.subtitle}</p>
@@ -175,7 +184,7 @@ const CommandCenter: React.FC<CommandCenterProps> = ({ feed, stats, onNavigate }
                 )}
               </div>
               
-              <button onClick={() => onNavigate(OmniModule.SYSTEM_LEDGER)} className="mt-8 w-full py-4 border border-dashed border-gray-800 text-gray-600 hover:text-blue-400 hover:border-blue-400/50 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all">Audit Raw Ledger</button>
+              <button onClick={() => onNavigate(OmniModule.SYSTEM_LEDGER)} className="mt-8 w-full py-4 border border-dashed border-gray-800 text-gray-600 hover:text-blue-400 hover:border-blue-400/50 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all">Audit Raw Sovereign Assets</button>
            </div>
         </div>
       </div>
