@@ -54,7 +54,6 @@ const App: React.FC = () => {
     
     const loadDB = async () => {
       await dbService.initDB();
-      // Safe check for process.env which is injected by env.js
       const envKey = (window as any).process?.env?.API_KEY;
       let keyDetected = !!envKey;
       
@@ -128,7 +127,7 @@ const App: React.FC = () => {
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-2xl shadow-blue-900/20"><Radio className="text-white" size={28} /></div>
           <div className="hidden md:block">
             <h1 className="text-xl font-black tracking-tight leading-none text-white">OMNIPDS</h1>
-            <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mt-1">Sovereign Node v2.2</p>
+            <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mt-1">Sovereign Node v2.3.0</p>
           </div>
         </div>
         
@@ -221,8 +220,8 @@ const App: React.FC = () => {
 };
 
 // DIRECT MOUNTING TO ROOT
-// This avoids the "Unexpected token <" error by ensuring Babel processes this code
-// before any browser-native execution.
+// This is the single entry point. By placing it here, we ensure Babel transforms
+// the entire component tree correctly and mounts it to the DOM.
 const rootElement = document.getElementById('root');
 if (rootElement) {
   const root = createRoot(rootElement);

@@ -19,8 +19,7 @@ const app = express();
 const PORT = 8087;
 const DB_FILE = path.join(__dirname, 'omnipds.sqlite');
 
-// 1. CRITICAL: Handle static files with correct MIME types BEFORE anything else
-// This stops the "MIME type not supported" errors in the browser.
+// 1. Set explicit MIME types for TypeScript/React files to satisfy Babel-standalone
 app.use(express.static(__dirname, {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.tsx') || filePath.endsWith('.ts')) {
@@ -77,7 +76,8 @@ app.post('/api/pds/persist', (req, res) => {
   }
 });
 
-// 2. SPA Fallback: Only serve index.html for non-file requests
+// 2. Strict SPA Fallback: Only serve index.html for non-api, non-file routes.
+// This prevents missing files (like favicon.ico or index.css) from being served as index.html.
 app.use((req, res, next) => {
   const isApi = req.path.startsWith('/api');
   const hasExtension = path.extname(req.path) !== '';
@@ -96,7 +96,7 @@ app.listen(PORT, '0.0.0.0', () => {
   ╠══════════════════════════════════════════════╣
   ║ ADDR: http://localhost:${PORT}                 ║
   ║ DB:   omnipds.sqlite                         ║
-  ║ AI:   CONNECTED (GEMINI FLASH-3)             ║
+  ║ AI:   CONNECTED (TIER 1 ACTIVE)              ║
   ╚══════════════════════════════════════════════╝
   `);
 });

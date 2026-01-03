@@ -1,10 +1,3 @@
 
-import React from 'react';
-import { createRoot } from 'react-dom/client';
-import App from './App.tsx';
-
-const rootElement = document.getElementById('root');
-if (rootElement) {
-  const root = createRoot(rootElement);
-  root.render(<App />);
-}
+// This file has been deprecated to prevent duplicate mounting and Babel transformation errors.
+// All mounting logic has been moved to App.tsx.
