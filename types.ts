@@ -15,7 +15,8 @@ export enum OmniModule {
   COMMAND_CENTER = 'COMMAND_CENTER',
   COMMS = 'COMMS',
   CREDENTIALS = 'CREDENTIALS',
-  MEDIA = 'MEDIA'
+  MEDIA = 'MEDIA',
+  GUIDE = 'GUIDE'
 }
 
 export interface Message {
