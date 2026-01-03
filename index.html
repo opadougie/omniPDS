@@ -55,9 +55,10 @@
 <body>
     <div id="root"></div>
     <!-- 
-      CRITICAL: Added data-presets to enable TypeScript and React transformation.
-      Babel will intercept the import tree and transform it.
+      We load App.tsx directly. 
+      To fix the "Unexpected token <" error, we must ensure Babel transforms the entry file correctly.
+      By using data-presets="react,typescript", Babel-standalone will handle JSX and TS features.
     -->
-    <script type="text/babel" data-type="module" data-presets="react,typescript" src="index.tsx"></script>
+    <script type="text/babel" data-type="module" data-presets="react,typescript" src="App.tsx"></script>
 </body>
 </html>

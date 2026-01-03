@@ -1,0 +1,22 @@
+
+/* Core muscle styles for OmniPDS */
+:root {
+  --bg-primary: #02040a;
+  --bg-secondary: #080b12;
+  --accent-primary: #3b82f6;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-primary);
+  color: #e2e8f0;
+}
+
+.muscle-border {
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.muscle-gradient {
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+}

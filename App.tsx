@@ -1,29 +1,30 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { createRoot } from 'react-dom/client';
 import { 
   LayoutDashboard, Users, Wallet as WalletIcon, Briefcase, Sparkles, Settings, 
   CreditCard, Globe, Copy, Check, Database, Terminal, Zap, BookOpen, UserPlus, 
   Box, Search, X, Activity, Workflow, Radio, MessageSquare, Fingerprint, Image, ListFilter
 } from 'lucide-react';
-import { OmniModule, SocialPost, Transaction, ProjectTask, WalletBalance, Note, Contact, Asset, HealthMetric, WorkflowRule } from './types';
-import SidebarItem from './components/SidebarItem';
-import SocialModule from './components/SocialModule';
-import FinanceModule from './components/FinanceModule';
-import ProjectModule from './components/ProjectModule';
-import InsightsModule from './components/InsightsModule';
-import DashboardModule from './components/DashboardModule';
-import WalletModule from './components/WalletModule';
-import SystemLedgerModule from './components/SystemLedgerModule';
-import VaultModule from './components/VaultModule';
-import PulseModule from './components/PulseModule';
-import InventoryModule from './components/InventoryModule';
-import HealthModule from './components/HealthModule';
-import WorkflowModule from './components/WorkflowModule';
-import CommandCenter from './components/CommandCenter';
-import CommsModule from './components/CommsModule';
-import IdentityModule from './components/IdentityModule';
-import MediaModule from './components/MediaModule';
-import * as dbService from './services/dbService';
+import { OmniModule, SocialPost, Transaction, ProjectTask, WalletBalance, Note, Contact, Asset, HealthMetric, WorkflowRule } from './types.ts';
+import SidebarItem from './components/SidebarItem.tsx';
+import SocialModule from './components/SocialModule.tsx';
+import FinanceModule from './components/FinanceModule.tsx';
+import ProjectModule from './components/ProjectModule.tsx';
+import InsightsModule from './components/InsightsModule.tsx';
+import DashboardModule from './components/DashboardModule.tsx';
+import WalletModule from './components/WalletModule.tsx';
+import SystemLedgerModule from './components/SystemLedgerModule.tsx';
+import VaultModule from './components/VaultModule.tsx';
+import PulseModule from './components/PulseModule.tsx';
+import InventoryModule from './components/InventoryModule.tsx';
+import HealthModule from './components/HealthModule.tsx';
+import WorkflowModule from './components/WorkflowModule.tsx';
+import CommandCenter from './components/CommandCenter.tsx';
+import CommsModule from './components/CommsModule.tsx';
+import IdentityModule from './components/IdentityModule.tsx';
+import MediaModule from './components/MediaModule.tsx';
+import * as dbService from './services/dbService.ts';
 
 const DEFAULT_CATEGORIES = ['Salary', 'Food', 'Groceries', 'Rent', 'Investments', 'Entertainment', 'Utilities', 'Transfer', 'Shopping', 'Travel'];
 
@@ -218,5 +219,12 @@ const App: React.FC = () => {
     </div>
   );
 };
+
+// Mount the app directly in the entry point file
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  const root = createRoot(rootElement);
+  root.render(<App />);
+}
 
 export default App;
