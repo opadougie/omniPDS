@@ -39,7 +39,7 @@ app.get('/env.js', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
-    core: 'omnipds-1.9.0-muscle',
+    core: 'omnipds-2.0.0-muscle-pro',
     ai: {
       active: !!process.env.API_KEY,
       engine: 'gemini-3-pro-preview'
@@ -76,16 +76,19 @@ app.post('/api/pds/persist', (req, res) => {
   }
 });
 
-// MUSCLE FIX: Use a raw RegExp for the catch-all to bypass Express 5/path-to-regexp v8 string parsing issues.
-// This matches everything except /api routes and files with dots (extensions).
-app.get(/^(?!\/api|\/.*\.).*$/, (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+// BULLETPROOF SPA FALLBACK: Avoids Express 5 Path-to-Regexp issues by using standard middleware
+app.use((req, res, next) => {
+  // If request is not for API and doesn't look like a file (no extension), serve index.html
+  if (!req.path.startsWith('/api') && !req.path.includes('.')) {
+    return res.sendFile(path.join(__dirname, 'index.html'));
+  }
+  next();
 });
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
   ╔══════════════════════════════════════════════╗
-  ║         OMNIPDS SOVEREIGN CORE v1.9.0        ║
+  ║         OMNIPDS SOVEREIGN CORE v2.0.0        ║
   ║             --- MUSCLE EDITION ---           ║
   ╠══════════════════════════════════════════════╣
   ║ ADDR: http://localhost:${PORT}                 ║

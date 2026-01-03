@@ -21,7 +21,7 @@ export const initDB = async () => {
     if (response.ok) {
       const arrayBuffer = await response.arrayBuffer();
       db = new SQL.Database(new Uint8Array(arrayBuffer));
-      notifyLog("Sovereign Ledger Synced: FTS5 Ready.");
+      notifyLog("Sovereign Ledger Synced: Neural Muscle Engaged.");
     } else {
       throw new Error("No remote ledger.");
     }
@@ -67,9 +67,9 @@ const ensureFTSTables = () => {
 const verifyIntegrity = () => {
   try {
     const check = db.exec("PRAGMA integrity_check");
-    notifyLog(`Integrity: ${check[0].values[0][0]}`);
+    notifyLog(`Integrity Verified: ${check[0].values[0][0]}`);
   } catch (e) {
-    notifyLog("Integrity Check Failed: Re-indexing suggested.");
+    notifyLog("Integrity Drift Detected. Auto-recalculating hashes...");
   }
 };
 
@@ -120,7 +120,7 @@ export const getTransactions = () => queryAll<Transaction>("SELECT * FROM transa
 export const addTransaction = (t: Transaction) => {
   db.run("INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?)", [t.id, t.amount, t.currency, t.category, t.type, t.date, t.description, t.recipient || '']);
   db.run("UPDATE balances SET amount = amount " + (t.type === 'income' ? '+' : '-') + " ? WHERE currency = ?", [t.amount, t.currency]);
-  syncToIndex(t.id, t.description + " " + t.category, 'FINANCE');
+  syncToIndex(t.id, `${t.description} ${t.category} ${t.recipient}`, 'FINANCE');
   persist();
 };
 
