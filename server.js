@@ -19,7 +19,6 @@ const app = express();
 const PORT = 8087;
 const DB_FILE = path.join(__dirname, 'omnipds.sqlite');
 
-// 1. Set explicit MIME types for TypeScript/React files to satisfy Babel-standalone
 app.use(express.static(__dirname, {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.tsx') || filePath.endsWith('.ts')) {
@@ -28,7 +27,7 @@ app.use(express.static(__dirname, {
   }
 }));
 
-app.use(bodyParser.raw({ type: 'application/octet-stream', limit: '50mb' }));
+app.use(bodyParser.raw({ type: 'application/octet-stream', limit: '100mb' }));
 
 app.get('/env.js', (req, res) => {
   res.set('Content-Type', 'application/javascript');
@@ -39,21 +38,16 @@ app.get('/env.js', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
-    core: 'omnipds-2.3.0-muscle',
-    ai: {
-      active: !!process.env.API_KEY,
-      tier: 'Tier 1'
-    },
+    core: 'omnipds-3.0.0-heavy',
     system: {
       platform: os.platform(),
       uptime: process.uptime(),
       load: os.loadavg(),
       cpus: os.cpus().length,
-      memory: {
-        total: os.totalmem(),
-        free: os.freemem()
-      }
-    }
+      totalMem: os.totalmem(),
+      freeMem: os.freemem()
+    },
+    ai: { active: !!process.env.API_KEY }
   });
 });
 
@@ -67,36 +61,20 @@ app.get('/api/pds/load', (req, res) => {
 
 app.post('/api/pds/persist', (req, res) => {
   try {
-    if (!req.body || req.body.length === 0) throw new Error("Persistence stream empty");
     fs.writeFileSync(DB_FILE, req.body);
     res.sendStatus(200);
   } catch (e) {
-    console.error("[OmniPDS] Persist Error:", e.message);
     res.status(500).send(e.message);
   }
 });
 
-// 2. Strict SPA Fallback: Only serve index.html for non-api, non-file routes.
-// This prevents missing files (like favicon.ico or index.css) from being served as index.html.
 app.use((req, res, next) => {
   const isApi = req.path.startsWith('/api');
-  const hasExtension = path.extname(req.path) !== '';
-  
-  if (!isApi && !hasExtension) {
-    return res.sendFile(path.join(__dirname, 'index.html'));
-  }
+  const hasExt = path.extname(req.path) !== '';
+  if (!isApi && !hasExt) return res.sendFile(path.join(__dirname, 'index.html'));
   next();
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`
-  ╔══════════════════════════════════════════════╗
-  ║         OMNIPDS SOVEREIGN CORE v2.3.0        ║
-  ║             --- MUSCLE EDITION ---           ║
-  ╠══════════════════════════════════════════════╣
-  ║ ADDR: http://localhost:${PORT}                 ║
-  ║ DB:   omnipds.sqlite                         ║
-  ║ AI:   CONNECTED (TIER 1 ACTIVE)              ║
-  ╚══════════════════════════════════════════════╝
-  `);
+  console.log(`\n  OMNIPDS HEAVY CORE ONLINE\n  PORT: ${PORT}\n  DB: ${DB_FILE}\n`);
 });
