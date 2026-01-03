@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
@@ -6,12 +7,12 @@ import {
   Box, Search, X, Activity, Workflow, Radio, MessageSquare, Fingerprint, Image, ListFilter,
   ShieldCheck, Cpu, HardDrive, TrendingUp, Target, Clock, ArrowUpRight, ArrowDownRight,
   Plus, Send, MessageCircle, Repeat2, MoreHorizontal, FileText, Calendar, MapPin, DollarSign,
-  AlertCircle, Table as TableIcon, Save, Play, Trash2, FileJson
+  AlertCircle, Table as TableIcon, Save, Play, Trash2, FileJson, Heart, Moon
 } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, LineChart, Line } from 'recharts';
 
-// --- TYPE DEFINITIONS ---
+// --- CORE TYPES ---
 enum OmniModule {
   COMMAND_CENTER = 'COMMAND_CENTER',
   SOCIAL = 'SOCIAL',
@@ -21,13 +22,7 @@ enum OmniModule {
   WALLET = 'WALLET',
   SYSTEM_LEDGER = 'SYSTEM_LEDGER',
   VAULT = 'VAULT',
-  PULSE = 'PULSE',
-  INVENTORY = 'INVENTORY',
   HEALTH = 'HEALTH',
-  WORKFLOWS = 'WORKFLOWS',
-  COMMS = 'COMMS',
-  CREDENTIALS = 'CREDENTIALS',
-  MEDIA = 'MEDIA'
 }
 
 interface SocialPost { id: string; author: string; text: string; likes: number; createdAt: string; }
@@ -35,8 +30,9 @@ interface Transaction { id: string; amount: number; currency: string; category: 
 interface WalletBalance { currency: string; amount: number; symbol: string; label: string; }
 interface ProjectTask { id: string; title: string; status: 'todo' | 'doing' | 'done'; priority: 'low' | 'medium' | 'high'; }
 interface Note { id: string; title: string; content: string; tags: string; updatedAt: string; }
+interface HealthMetric { id: string; date: string; type: string; value: number; unit: string; }
 
-// --- DATABASE SERVICE MUSCLE ---
+// --- SOVEREIGN LEDGER MUSCLE ---
 let db: any = null;
 const SQL_WASM_PATH = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.wasm';
 
@@ -56,11 +52,12 @@ const dbService = {
       if (response.ok) {
         const arrayBuffer = await response.arrayBuffer();
         db = new SQL.Database(new Uint8Array(arrayBuffer));
-        this.notifyLog("Sovereign Ledger Synced: Heavy Core Ready.");
-      } else { throw new Error("Fresh start"); }
+        this.notifyLog("Heavy Core Mounted: Syncing Ledger...");
+      } else { throw new Error("Fresh Start"); }
     } catch (e) {
       db = new SQL.Database();
       this.createSchema();
+      this.seedMuscleData();
     }
     this.ensureFTS();
     return db;
@@ -74,12 +71,37 @@ const dbService = {
       CREATE TABLE IF NOT EXISTS balances (currency TEXT PRIMARY KEY, amount REAL, symbol TEXT, label TEXT);
       CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, title TEXT, content TEXT, tags TEXT, updatedAt TEXT);
       CREATE TABLE IF NOT EXISTS health (id TEXT PRIMARY KEY, date TEXT, type TEXT, value REAL, unit TEXT);
-      CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT, handle TEXT, category TEXT, lastContacted TEXT, notes TEXT);
-      CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, name TEXT, serial TEXT, value REAL, category TEXT, location TEXT, purchaseDate TEXT);
       
-      INSERT OR IGNORE INTO balances VALUES ('USD', 12760.75, '$', 'Main Ledger');
-      INSERT OR IGNORE INTO balances VALUES ('BTC', 0.12, '₿', 'Sovereign Vault');
+      INSERT OR IGNORE INTO balances VALUES ('USD', 12760.75, '$', 'Primary Reserve');
+      INSERT OR IGNORE INTO balances VALUES ('BTC', 0.12, '₿', 'Cold Storage');
     `);
+    this.persist();
+  },
+
+  seedMuscleData() {
+    this.notifyLog("Detecting Empty State. Injecting Muscle Data...");
+    
+    // Seed Social
+    const demoPosts = [
+      {id:'1', author:'me.pds', text:'Successfully migrated 1.2TB of social data to the new SQLite Sovereign Ledger. Feels fast.', likes:12, createdAt: new Date(Date.now()-100000).toISOString()},
+      {id:'2', author:'prime.ai', text:'Detected metabolic flux in bio-matrix. Recommendation: Optimize circadian rhythm.', likes:5, createdAt: new Date(Date.now()-500000).toISOString()}
+    ];
+    demoPosts.forEach(p => db.run("INSERT INTO posts VALUES (?,?,?,?,?)", [p.id, p.author, p.text, p.likes, p.createdAt]));
+
+    // Seed Finance
+    const demoTxs = [
+      {id:'t1', amount:4250.00, currency:'USD', category:'Income', type:'income', date:new Date().toISOString().split('T')[0], description:'Consulting Settlement', recipient:'Direct'},
+      {id:'t2', amount:120.50, currency:'USD', category:'Hardware', type:'expense', date:new Date().toISOString().split('T')[0], description:'GPU Compute Nodes', recipient:'NodeProvider'}
+    ];
+    demoTxs.forEach(t => db.run("INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?)", [t.id, t.amount, t.currency, t.category, t.type, t.date, t.description, t.recipient]));
+
+    // Seed Health
+    const demoHealth = [
+       {id:'h1', date:new Date().toISOString(), type:'Energy', value:85, unit:'%'},
+       {id:'h2', date:new Date().toISOString(), type:'Sleep', value:7.5, unit:'hrs'}
+    ];
+    demoHealth.forEach(h => db.run("INSERT INTO health VALUES (?,?,?,?,?)", [h.id, h.date, h.type, h.value, h.unit]));
+
     this.persist();
   },
 
@@ -87,25 +109,24 @@ const dbService = {
     try {
       db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS fts_ledger USING fts5(id UNINDEXED, content, type UNINDEXED);`);
       this.ftsEnabled = true;
-      this.notifyLog("FTS5 Muscle Activated.");
+      this.notifyLog("FTS5 Search Muscle Active.");
     } catch(e) { 
       this.ftsEnabled = false;
-      this.notifyLog("FTS5 Unsupported. Using LIKE Fallback."); 
+      this.notifyLog("FTS5 Unavailable. Scaling to LIKE indexing."); 
     }
   },
 
   async persist() {
     const binary = db.export();
-    // CRITICAL: Explicitly set Content-Type so server's bodyParser.raw can identify the stream
     fetch('/api/pds/persist', { 
       method: 'POST', 
       headers: { 'Content-Type': 'application/octet-stream' },
       body: binary 
-    });
+    }).catch(() => this.notifyLog("Persistence Drift Detected. Check connectivity."));
   },
 
-  // Defined as a method to ensure generic type inference works correctly within the object
   queryAll<T>(sql: string, params: any[] = []): T[] {
+    if (!db) return [];
     try {
       const res = db.exec(sql, params);
       if (!res.length) return [];
@@ -121,12 +142,8 @@ const dbService = {
   universalSearch(term: string) {
     if (!term.trim()) return [];
     if (this.ftsEnabled) {
-      try {
-        // Fix: Removed <any> to prevent "Untyped function calls" error when 'this' might be inferred as 'any'
-        return this.queryAll("SELECT * FROM fts_ledger WHERE fts_ledger MATCH ? ORDER BY rank", [`${term}*`]);
-      } catch (e) { /* fallback */ }
+      try { return this.queryAll("SELECT * FROM fts_ledger WHERE fts_ledger MATCH ? ORDER BY rank", [`${term}*`]); } catch (e) {}
     }
-    // Fix: Removed <any> from fallback search to prevent "Untyped function calls" error
     return this.queryAll(`
       SELECT id, text as content, 'SOCIAL' as type FROM posts WHERE text LIKE ?
       UNION ALL
@@ -134,46 +151,10 @@ const dbService = {
       UNION ALL
       SELECT id, title as content, 'VAULT' as type FROM notes WHERE title LIKE ?
     `, [`%${term}%`, `%${term}%`, `%${term}%`]);
-  },
-
-  addPost(p: SocialPost) { 
-    db.run("INSERT INTO posts VALUES (?,?,?,?,?)", [p.id, p.author, p.text, p.likes, p.createdAt]); 
-    if (this.ftsEnabled) db.run("INSERT INTO fts_ledger VALUES (?,?,?)", [p.id, p.text, 'SOCIAL']);
-    this.persist(); 
-  },
-
-  addTransaction(t: Transaction) {
-    db.run("INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?)", [t.id, t.amount, t.currency, t.category, t.type, t.date, t.description, t.recipient || '']);
-    db.run("UPDATE balances SET amount = amount " + (t.type === 'income' ? '+' : '-') + " ? WHERE currency = ?", [t.amount, t.currency]);
-    if (this.ftsEnabled) db.run("INSERT INTO fts_ledger VALUES (?,?,?)", [t.id, t.description, 'FINANCE']);
-    this.persist();
   }
 };
 
-// --- GEMINI SERVICE ---
-const aiService = {
-  async getInsights(data: any) {
-    // Correct usage of process.env.API_KEY as per guidelines
-    if (!process.env.API_KEY) return { insights: [] };
-    const genAI = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const res = await genAI.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Analyze life data: ${JSON.stringify(data)}. Return 3 strategic insights in JSON.`,
-      config: { responseMimeType: "application/json", responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          insights: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: {
-            title: {type: Type.STRING}, description: {type: Type.STRING}, impact: {type: Type.STRING}
-          }}}
-        }
-      }}
-    });
-    // Use .text property directly
-    return JSON.parse(res.text || '{"insights":[]}');
-  }
-};
-
-// --- MAIN APP COMPONENT ---
+// --- APP COMPONENT ---
 const App: React.FC = () => {
   const [activeModule, setActiveModule] = useState<OmniModule>(OmniModule.COMMAND_CENTER);
   const [dbReady, setDbReady] = useState(false);
@@ -182,30 +163,41 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   
-  // Data State
+  // High-Density State
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [balances, setBalances] = useState<WalletBalance[]>([]);
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
-  
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [health, setHealth] = useState<HealthMetric[]>([]);
+
   useEffect(() => {
     dbService.onLog(msg => setLogs(prev => [msg, ...prev].slice(0, 5)));
     const boot = async () => {
       await dbService.init();
-      const hRes = await fetch('/api/health').then(r => r.json());
+      const hRes = await fetch('/api/health').then(r => r.json()).catch(()=>({}));
       setHwStats(hRes);
       refresh();
       setDbReady(true);
     };
     boot();
-    const tick = setInterval(async () => {
+    const ticker = setInterval(async () => {
       try {
         const res = await fetch('/api/health').then(r => r.json());
         setHwStats(res);
       } catch (e) {}
     }, 5000);
-    return () => clearInterval(tick);
+    return () => clearInterval(ticker);
   }, []);
+
+  const refresh = () => {
+    setPosts(dbService.queryAll<SocialPost>("SELECT * FROM posts ORDER BY createdAt DESC"));
+    setTransactions(dbService.queryAll<Transaction>("SELECT * FROM transactions ORDER BY date DESC"));
+    setBalances(dbService.queryAll<WalletBalance>("SELECT * FROM balances"));
+    setTasks(dbService.queryAll<ProjectTask>("SELECT * FROM tasks"));
+    setNotes(dbService.queryAll<Note>("SELECT * FROM notes ORDER BY updatedAt DESC"));
+    setHealth(dbService.queryAll<HealthMetric>("SELECT * FROM health ORDER BY date DESC"));
+  };
 
   useEffect(() => {
     if (searchTerm.length > 1) {
@@ -214,13 +206,6 @@ const App: React.FC = () => {
       setSearchResults([]);
     }
   }, [searchTerm]);
-
-  const refresh = () => {
-    setPosts(dbService.queryAll<SocialPost>("SELECT * FROM posts ORDER BY createdAt DESC"));
-    setTransactions(dbService.queryAll<Transaction>("SELECT * FROM transactions ORDER BY date DESC"));
-    setBalances(dbService.queryAll<WalletBalance>("SELECT * FROM balances"));
-    setTasks(dbService.queryAll<ProjectTask>("SELECT * FROM tasks"));
-  };
 
   if (!dbReady) return (
     <div className="h-screen flex flex-col items-center justify-center bg-[#02040a]">
@@ -233,7 +218,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-[#02040a] text-gray-100 font-sans overflow-hidden">
-      {/* Sidebar */}
+      {/* Sidebar Navigation */}
       <nav className="w-72 border-r border-gray-900 bg-[#080b12] flex flex-col py-8 px-4">
         <div className="flex items-center gap-4 mb-12 px-2">
            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-800 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-900/40">
@@ -247,50 +232,41 @@ const App: React.FC = () => {
 
         <div className="flex-1 space-y-1 overflow-y-auto custom-scrollbar pr-2">
            <NavItem icon={<LayoutDashboard/>} label="Command Center" active={activeModule === OmniModule.COMMAND_CENTER} onClick={()=>setActiveModule(OmniModule.COMMAND_CENTER)}/>
-           <NavItem icon={<MessageSquare/>} label="Comms Hub" active={activeModule === OmniModule.COMMS} onClick={()=>setActiveModule(OmniModule.COMMS)}/>
-           <NavItem icon={<Activity/>} label="Bio-Matrix" active={activeModule === OmniModule.HEALTH} onClick={()=>setActiveModule(OmniModule.HEALTH)}/>
-           <NavItem icon={<Sparkles/>} label="Strategic AI" active={activeModule === OmniModule.INSIGHTS} onClick={()=>setActiveModule(OmniModule.INSIGHTS)}/>
-           <div className="h-4"></div>
-           <NavItem icon={<CreditCard/>} label="E-Wallet" active={activeModule === OmniModule.WALLET} onClick={()=>setActiveModule(OmniModule.WALLET)}/>
+           <NavItem icon={<MessageSquare/>} label="Social Feed" active={activeModule === OmniModule.SOCIAL} onClick={()=>setActiveModule(OmniModule.SOCIAL)}/>
+           <NavItem icon={<WalletIcon/>} label="Economy Hub" active={activeModule === OmniModule.FINANCE} onClick={()=>setActiveModule(OmniModule.FINANCE)}/>
            <NavItem icon={<Briefcase/>} label="Mission Control" active={activeModule === OmniModule.PROJECTS} onClick={()=>setActiveModule(OmniModule.PROJECTS)}/>
-           <NavItem icon={<BookOpen/>} label="Vault" active={activeModule === OmniModule.VAULT} onClick={()=>setActiveModule(OmniModule.VAULT)}/>
-           <div className="h-4"></div>
-           <NavItem icon={<Users/>} label="Social" active={activeModule === OmniModule.SOCIAL} onClick={()=>setActiveModule(OmniModule.SOCIAL)}/>
+           <NavItem icon={<Activity/>} label="Bio-Matrix" active={activeModule === OmniModule.HEALTH} onClick={()=>setActiveModule(OmniModule.HEALTH)}/>
+           <NavItem icon={<BookOpen/>} label="Universal Vault" active={activeModule === OmniModule.VAULT} onClick={()=>setActiveModule(OmniModule.VAULT)}/>
            <NavItem icon={<Terminal/>} label="System Ledger" active={activeModule === OmniModule.SYSTEM_LEDGER} onClick={()=>setActiveModule(OmniModule.SYSTEM_LEDGER)}/>
         </div>
 
         <div className="mt-8 pt-8 border-t border-gray-900 px-2">
            <div className="flex items-center gap-2 mb-4">
-              <span className={`w-2 h-2 rounded-full ${dbReady ? 'bg-blue-500 animate-pulse' : 'bg-gray-700'}`}></span>
-              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Core Online</span>
+              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Protocol Active</span>
            </div>
            <p className="text-[9px] font-mono text-blue-400/70 truncate">{logs[0] || 'Node Initialized.'}</p>
         </div>
       </nav>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-[#02040a]">
+      {/* Main Command Display */}
+      <main className="flex-1 flex flex-col overflow-hidden">
         <header className="h-20 border-b border-gray-900 flex items-center justify-between px-10 glass-panel z-50">
            <div className="relative w-96 group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-blue-400 transition-all" size={18} />
               <input 
-                type="text" 
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
+                type="text" value={searchTerm} onChange={e=>setSearchTerm(e.target.value)}
                 placeholder="Universal Search..." 
-                className="w-full bg-[#080b12] border border-gray-800 rounded-2xl py-3 pl-12 pr-4 outline-none focus:ring-2 focus:ring-blue-600/30 transition-all text-sm font-medium placeholder-gray-700" 
+                className="w-full bg-[#080b12] border border-gray-800 rounded-2xl py-3 pl-12 pr-4 outline-none focus:ring-2 focus:ring-blue-600/30 transition-all text-sm font-medium" 
               />
               {searchResults.length > 0 && (
-                <div className="absolute top-full left-0 right-0 mt-4 bg-[#080b12] border border-gray-800 rounded-3xl shadow-2xl overflow-hidden z-50">
-                  {searchResults.map((res, i) => (
-                    <button key={i} className="w-full flex items-center gap-4 px-6 py-4 hover:bg-blue-600/10 border-b border-gray-800/50 last:border-0 transition-all text-left">
-                       <div className="p-2 bg-gray-900 rounded-lg text-blue-400"><Database size={14}/></div>
-                       <div>
-                          <p className="font-bold text-sm text-gray-100">{res.content}</p>
-                          <span className="text-[10px] font-black text-gray-600 uppercase tracking-tighter">{res.type}</span>
-                       </div>
-                    </button>
-                  ))}
+                <div className="absolute top-full left-0 right-0 mt-4 bg-[#080b12] border border-gray-800 rounded-3xl shadow-2xl overflow-hidden z-50 max-h-96 overflow-y-auto">
+                   {searchResults.map((res, i) => (
+                     <div key={i} className="p-4 hover:bg-gray-900 border-b border-gray-800 last:border-0 cursor-pointer">
+                        <p className="text-xs font-bold text-gray-300">{res.content}</p>
+                        <span className="text-[9px] font-black text-blue-500 uppercase">{res.type}</span>
+                     </div>
+                   ))}
                 </div>
               )}
            </div>
@@ -304,31 +280,26 @@ const App: React.FC = () => {
                     <span className="text-[10px] font-mono text-blue-400 font-bold">{(hwStats?.system?.load?.[0] || 0.0).toFixed(2)}</span>
                  </div>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-center overflow-hidden">
-                 <img src="https://picsum.photos/seed/pds/100/100" alt="Avatar" className="w-full h-full object-cover opacity-80" />
+              <div className="w-10 h-10 rounded-xl bg-gray-900 border border-gray-800 flex items-center justify-center font-black text-blue-500">
+                PDS
               </div>
            </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
-           <div className="p-10 max-w-7xl mx-auto pb-40">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-10">
+           <div className="max-w-7xl mx-auto space-y-10 pb-40">
               {activeModule === OmniModule.COMMAND_CENTER && (
                 <div className="space-y-10 animate-in fade-in duration-500">
                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                       <StatCard label="Ledger Valuation" value={`$${balances[0]?.amount.toLocaleString() || '0'}`} icon={<CreditCard/>} color="text-blue-400" />
-                      <StatCard label="Data Index" value={dbService.ftsEnabled ? "FTS5 Active" : "LIKE Fallback"} icon={<Database/>} color="text-green-400" />
-                      <StatCard label="System Load" value={`${hwStats?.system?.cpus || 0} Cores`} icon={<Cpu/>} color="text-purple-400" />
-                      <StatCard label="Memory Matrix" value={`${(hwStats?.system?.freeMem / 1024 / 1024 / 1024 || 0).toFixed(1)}GB Free`} icon={<HardDrive/>} color="text-amber-400" />
+                      <StatCard label="Data Muscle" value={`${posts.length + transactions.length + tasks.length} Items`} icon={<Database/>} color="text-green-400" />
+                      <StatCard label="System Uptime" value={`${Math.floor(hwStats?.system?.uptime / 3600 || 0)}h Active`} icon={<Clock/>} color="text-purple-400" />
+                      <StatCard label="Health Pulse" value={`${health[0]?.value || 0}%`} icon={<Heart/>} color="text-rose-400" />
                    </div>
 
                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                       <div className="lg:col-span-8 p-10 bg-[#080b12] rounded-[3rem] border border-gray-900 shadow-2xl relative overflow-hidden muscle-pulse">
-                         <div className="flex items-center justify-between mb-10">
-                            <div>
-                               <h3 className="text-2xl font-black text-white tracking-tight">Node Telemetry Graph</h3>
-                               <p className="text-gray-500 text-sm">Real-time performance from Sovereign Node Cluster.</p>
-                            </div>
-                         </div>
+                         <h3 className="text-2xl font-black text-white tracking-tight mb-8">Node Telemetry Graph</h3>
                          <div className="h-80 w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                <AreaChart data={[{n:'01',v:40},{n:'02',v:30},{n:'03',v:60},{n:'04',v:50},{n:'05',v:80}]}>
@@ -338,32 +309,29 @@ const App: React.FC = () => {
                             </ResponsiveContainer>
                          </div>
                       </div>
-                      <div className="lg:col-span-4 p-8 bg-[#080b12] border border-gray-900 rounded-[2.5rem] flex flex-col h-[520px]">
-                         <h4 className="text-lg font-black mb-8 flex items-center justify-between">
-                            Recent Events
-                            <span className="text-[9px] font-black text-blue-500 bg-blue-500/10 px-2 py-1 rounded-full uppercase tracking-widest">Sovereign</span>
-                         </h4>
-                         <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-2">
-                            {transactions.slice(0, 5).map(t => (
-                              <div key={t.id} className="p-4 bg-gray-950/50 rounded-2xl border border-gray-900 group hover:border-gray-700 transition-all">
-                                 <p className="text-xs font-bold text-gray-300">{t.description}</p>
-                                 <div className="flex items-center justify-between mt-2">
-                                    <span className="text-[9px] font-black text-blue-400 uppercase">{t.category}</span>
-                                    <span className={`text-[10px] font-mono font-bold ${t.type === 'income' ? 'text-green-400' : 'text-rose-400'}`}>
-                                       {t.type === 'income' ? '+' : '-'}${t.amount}
-                                    </span>
+                      <div className="lg:col-span-4 space-y-6">
+                         <div className="p-8 bg-[#080b12] border border-gray-900 rounded-[2.5rem]">
+                            <h4 className="font-black text-white mb-6 uppercase text-xs tracking-widest">Recent Activity</h4>
+                            <div className="space-y-4 max-h-96 overflow-y-auto custom-scrollbar pr-2">
+                               {[...posts, ...transactions].slice(0, 5).map((item: any, i) => (
+                                 <div key={i} className="p-4 bg-gray-950/50 rounded-2xl border border-gray-900">
+                                    <p className="text-xs font-bold text-gray-300 truncate">{item.text || item.description}</p>
+                                    <span className="text-[9px] font-black text-blue-500 uppercase mt-2 block">{item.createdAt ? 'SOCIAL' : 'FINANCE'}</span>
                                  </div>
-                              </div>
-                            ))}
+                               ))}
+                            </div>
                          </div>
                       </div>
                    </div>
                 </div>
               )}
 
-              {activeModule === OmniModule.SOCIAL && <SocialModule posts={posts} onAdd={refresh}/>}
-              {activeModule === OmniModule.FINANCE && <FinanceModule txs={transactions} balances={balances} onAdd={refresh}/>}
-              {activeModule === OmniModule.SYSTEM_LEDGER && <SystemLedgerModule hwStats={hwStats} onAdd={refresh}/>}
+              {activeModule === OmniModule.SOCIAL && <SocialModule posts={posts} onRefresh={refresh} />}
+              {activeModule === OmniModule.FINANCE && <FinanceModule txs={transactions} balances={balances} onRefresh={refresh} />}
+              {activeModule === OmniModule.PROJECTS && <ProjectModule tasks={tasks} onRefresh={refresh} />}
+              {activeModule === OmniModule.HEALTH && <HealthModule metrics={health} onRefresh={refresh} />}
+              {activeModule === OmniModule.VAULT && <VaultModule notes={notes} onRefresh={refresh} />}
+              {activeModule === OmniModule.SYSTEM_LEDGER && <SystemLedgerModule hwStats={hwStats} />}
            </div>
         </div>
       </main>
@@ -371,7 +339,8 @@ const App: React.FC = () => {
   );
 };
 
-// --- COMPONENTS ---
+// --- SUB-MODULES ---
+
 const NavItem = ({icon, label, active, onClick}: any) => (
   <button onClick={onClick} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all group ${active ? 'bg-blue-600 text-white shadow-xl shadow-blue-900/30' : 'text-gray-500 hover:bg-gray-800/40 hover:text-white'}`}>
      <div className={`${active ? 'text-white' : 'text-gray-500 group-hover:text-blue-400'} transition-colors`}>{React.cloneElement(icon, {size:20})}</div>
@@ -387,33 +356,28 @@ const StatCard = ({label, value, icon, color}: any) => (
   </div>
 );
 
-const SocialModule = ({posts, onAdd}: any) => {
-  const [text, setText] = useState('');
+const SocialModule = ({posts, onRefresh}: any) => {
+  const [input, setInput] = useState('');
   const submit = (e: any) => {
     e.preventDefault();
-    if (!text.trim()) return;
-    dbService.addPost({id:Date.now().toString(), author:'me.pds', text, likes:0, createdAt:new Date().toISOString()});
-    setText(''); onAdd();
+    if (!input.trim()) return;
+    dbService.queryAll(`INSERT INTO posts VALUES (?,?,?,?,?)`, [Date.now().toString(), 'me.pds', input, 0, new Date().toISOString()]);
+    dbService.persist(); setInput(''); onRefresh();
   };
   return (
     <div className="max-w-2xl mx-auto space-y-8 animate-in slide-in-from-bottom-6 duration-500">
        <form onSubmit={submit} className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 shadow-xl">
-          <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="What's happening in your decentralized consciousness?" className="w-full bg-transparent border-none focus:ring-0 text-lg resize-none placeholder-gray-700 h-24" />
-          <div className="flex justify-between items-center mt-6 pt-6 border-t border-gray-900">
-             <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2.5 rounded-full font-black text-[10px] uppercase tracking-widest transition-all ml-auto">Broadcast</button>
-          </div>
+          <textarea value={input} onChange={e=>setInput(e.target.value)} placeholder="Broadcast to your sovereign network..." className="w-full bg-transparent border-none focus:ring-0 text-lg resize-none placeholder-gray-700 h-24" />
+          <div className="flex justify-end mt-4"><button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2.5 rounded-full font-black text-[10px] uppercase tracking-widest transition-all">Broadcast</button></div>
        </form>
        <div className="space-y-4">
           {posts.map((p: any) => (
-            <div key={p.id} className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 hover:border-gray-800 transition-all group">
+            <div key={p.id} className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 hover:border-gray-800 transition-all">
                <div className="flex gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-gray-900 border border-gray-800 flex items-center justify-center font-black text-blue-500">{p.author[0]}</div>
+                  <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center font-bold text-blue-500">{p.author[0]}</div>
                   <div className="flex-1">
-                     <div className="flex justify-between items-center mb-2">
-                        <span className="font-black text-white">{p.author}</span>
-                        <span className="text-[10px] text-gray-600 font-mono">{p.createdAt.slice(11,16)}</span>
-                     </div>
-                     <p className="text-gray-300 leading-relaxed">{p.text}</p>
+                     <p className="font-black text-white text-sm mb-1">{p.author} <span className="text-[9px] text-gray-600 ml-2">{p.createdAt.slice(11,16)}</span></p>
+                     <p className="text-gray-300 leading-relaxed text-sm">{p.text}</p>
                   </div>
                </div>
             </div>
@@ -423,72 +387,176 @@ const SocialModule = ({posts, onAdd}: any) => {
   );
 };
 
-const FinanceModule = ({txs, balances, onAdd}: any) => {
+const FinanceModule = ({txs, balances, onRefresh}: any) => {
   const [amount, setAmount] = useState('');
   const [desc, setDesc] = useState('');
-  const [type, setType] = useState<'income' | 'expense'>('expense');
   const submit = (e: any) => {
     e.preventDefault();
     if (!amount || !desc) return;
-    dbService.addTransaction({id:Date.now().toString(), amount:parseFloat(amount), currency:'USD', category:'Transfer', type, date:new Date().toISOString().split('T')[0], description:desc});
-    setAmount(''); setDesc(''); onAdd();
+    dbService.queryAll(`INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?)`, [Date.now().toString(), parseFloat(amount), 'USD', 'Manual', 'expense', new Date().toISOString().split('T')[0], desc, 'Self']);
+    dbService.queryAll(`UPDATE balances SET amount = amount - ? WHERE currency = 'USD'`, [parseFloat(amount)]);
+    dbService.persist(); setAmount(''); setDesc(''); onRefresh();
   };
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in slide-in-from-bottom-6 duration-500">
        <div className="lg:col-span-2 space-y-8">
           <div className="p-10 bg-gradient-to-br from-blue-600 to-indigo-800 rounded-[3rem] shadow-2xl relative overflow-hidden group">
              <div className="relative z-10">
-                <p className="text-blue-100 text-sm font-medium mb-1">Total Sovereign Liquidity</p>
-                <h3 className="text-5xl font-black tracking-tighter text-white mb-10">${balances[0]?.amount.toLocaleString()}</h3>
+                <p className="text-blue-100 text-sm font-medium mb-1">Total Ledger Valuation</p>
+                <h3 className="text-5xl font-black tracking-tighter text-white">${balances[0]?.amount.toLocaleString()}</h3>
              </div>
           </div>
           <div className="bg-[#080b12] rounded-[2.5rem] border border-gray-900 p-8">
-             <h4 className="font-black text-white mb-8">Activity Ledger</h4>
-             <div className="space-y-3">
+             <h4 className="font-black text-white mb-8 uppercase text-xs">Recent Ledger History</h4>
+             <div className="space-y-2">
                 {txs.map((t: any) => (
-                  <div key={t.id} className="p-5 bg-gray-950/50 rounded-2xl border border-gray-900 flex justify-between items-center group hover:bg-gray-900/50 transition-all">
-                     <div className="flex items-center gap-4">
-                        <div className={`p-3 rounded-xl ${t.type === 'income' ? 'bg-green-500/10 text-green-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                           {t.type === 'income' ? <ArrowUpRight size={18}/> : <ArrowDownRight size={18}/>}
-                        </div>
-                        <div><p className="font-bold text-sm text-gray-200">{t.description}</p><p className="text-[10px] text-gray-600 font-black uppercase tracking-widest">{t.date}</p></div>
-                     </div>
+                  <div key={t.id} className="p-4 bg-gray-950/50 rounded-2xl border border-gray-900 flex justify-between items-center group hover:bg-gray-900 transition-all">
+                     <div><p className="font-bold text-sm text-gray-200">{t.description}</p><p className="text-[9px] text-gray-600 font-black uppercase tracking-widest">{t.date}</p></div>
                      <p className={`font-black text-sm ${t.type === 'income' ? 'text-green-400' : 'text-rose-400'}`}>{t.type === 'income' ? '+' : '-'}${t.amount}</p>
                   </div>
                 ))}
              </div>
           </div>
        </div>
-       <div className="space-y-6">
-          <form onSubmit={submit} className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 shadow-xl space-y-4">
-             <h4 className="text-lg font-black mb-6 text-white">Authorize Entry</h4>
-             <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00" className="w-full bg-gray-950 border border-gray-800 rounded-2xl px-5 py-4 font-mono font-bold text-xl text-blue-400 outline-none focus:ring-2 focus:ring-blue-600/30" />
-             <div className="flex bg-gray-950 rounded-2xl p-1 border border-gray-800">
-                <button type="button" onClick={()=>setType('income')} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${type === 'income' ? 'bg-green-600 text-white' : 'text-gray-500'}`}>Income</button>
-                <button type="button" onClick={()=>setType('expense')} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${type === 'expense' ? 'bg-rose-600 text-white' : 'text-gray-500'}`}>Expense</button>
-             </div>
-             <input type="text" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Transaction Description..." className="w-full bg-gray-950 border border-gray-800 rounded-2xl px-5 py-3 text-sm" />
-             <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] shadow-xl shadow-blue-900/30 transition-all">Commit Entry</button>
-          </form>
+       <form onSubmit={submit} className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 shadow-xl space-y-4">
+          <h4 className="text-lg font-black mb-6 text-white uppercase text-xs">Authorize Transaction</h4>
+          <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0.00" className="w-full bg-gray-950 border border-gray-800 rounded-2xl px-5 py-4 font-mono font-bold text-xl text-blue-400 outline-none" />
+          <input type="text" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Memo..." className="w-full bg-gray-950 border border-gray-800 rounded-2xl px-5 py-3 text-sm" />
+          <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-xl shadow-blue-900/30">Commit Entry</button>
+       </form>
+    </div>
+  );
+};
+
+const ProjectModule = ({tasks, onRefresh}: any) => {
+  const [input, setInput] = useState('');
+  const submit = (e: any) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+    dbService.queryAll(`INSERT INTO tasks VALUES (?,?,?,?)`, [Date.now().toString(), input, 'todo', 'medium']);
+    dbService.persist(); setInput(''); onRefresh();
+  };
+  return (
+    <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-bottom-6 duration-500">
+       <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 flex gap-4">
+          <input type="text" value={input} onChange={e=>setInput(e.target.value)} placeholder="Define new mission objective..." className="flex-1 bg-transparent border-none focus:ring-0 text-lg font-bold placeholder-gray-700" />
+          <button onClick={submit} className="bg-blue-600 px-8 py-2 rounded-2xl font-black text-[10px] uppercase">Add Task</button>
+       </div>
+       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {tasks.map((t: any) => (
+            <div key={t.id} className="p-6 bg-[#080b12] rounded-[2rem] border border-gray-900 group hover:border-gray-700 transition-all flex items-center justify-between">
+               <div className="flex items-center gap-4">
+                  <div className="w-6 h-6 rounded-full border-2 border-gray-800 group-hover:border-blue-500 transition-colors"></div>
+                  <p className="font-bold text-gray-200">{t.title}</p>
+               </div>
+               <span className="text-[9px] font-black uppercase text-gray-600 tracking-widest">{t.priority}</span>
+            </div>
+          ))}
        </div>
     </div>
   );
 };
 
-const SystemLedgerModule = ({hwStats}: any) => {
+const HealthModule = ({metrics, onRefresh}: any) => {
+  const [val, setVal] = useState('');
+  const [type, setType] = useState('Energy');
+  const submit = (e: any) => {
+    e.preventDefault();
+    if (!val) return;
+    dbService.queryAll(`INSERT INTO health VALUES (?,?,?,?,?)`, [Date.now().toString(), new Date().toISOString(), type, parseFloat(val), type === 'Energy' ? '%' : 'hrs']);
+    dbService.persist(); setVal(''); onRefresh();
+  };
   return (
     <div className="space-y-8 animate-in slide-in-from-bottom-6 duration-500">
        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 group hover:border-blue-500/20 transition-all">
-             <Terminal className="text-blue-500 mb-6" size={32} />
-             <h4 className="text-xl font-black text-white mb-2">Protocol Node</h4>
-             <p className="text-gray-500 text-xs font-mono mb-4">{hwStats?.core || 'Node-3.0'}</p>
-             <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span><span className="text-[10px] font-black text-gray-600 uppercase">Sovereign Running</span></div>
+          <div className="p-8 bg-[#080b12] rounded-[2rem] border border-gray-900">
+             <h4 className="font-black text-white mb-8 text-xs uppercase">Historical Flow</h4>
+             <div className="h-48 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                   <LineChart data={metrics.slice(0, 5).reverse().map((m: any) => ({n: m.date.slice(11, 16), v: m.value}))}>
+                      <Line type="monotone" dataKey="v" stroke="#3b82f6" strokeWidth={4} dot={false} />
+                   </LineChart>
+                </ResponsiveContainer>
+             </div>
           </div>
+          <div className="md:col-span-2 space-y-4">
+             {metrics.slice(0, 4).map((m: any) => (
+               <div key={m.id} className="p-6 bg-[#080b12] rounded-[2rem] border border-gray-900 flex justify-between items-center group">
+                  <div className="flex items-center gap-4">
+                     <div className="p-3 bg-gray-950 rounded-xl text-blue-500"><Activity size={20}/></div>
+                     <div><p className="font-black text-white">{m.type}</p><p className="text-[9px] text-gray-600 uppercase font-black tracking-widest">{m.date.slice(0, 10)}</p></div>
+                  </div>
+                  <p className="text-xl font-black text-white">{m.value}{m.unit}</p>
+               </div>
+             ))}
+          </div>
+       </div>
+       <form onSubmit={submit} className="p-8 bg-blue-600/5 border border-blue-500/20 rounded-[2.5rem] flex gap-4">
+          <select value={type} onChange={e=>setType(e.target.value)} className="bg-gray-950 border border-gray-800 rounded-2xl px-4 py-3 text-sm flex-1">
+             <option>Energy</option>
+             <option>Sleep</option>
+             <option>Weight</option>
+          </select>
+          <input type="number" value={val} onChange={e=>setVal(e.target.value)} placeholder="Value..." className="bg-gray-950 border border-gray-800 rounded-2xl px-4 py-3 text-sm flex-1" />
+          <button type="submit" className="bg-blue-600 px-8 py-3 rounded-2xl font-black text-[10px] uppercase">Commit</button>
+       </form>
+    </div>
+  );
+};
+
+const VaultModule = ({notes, onRefresh}: any) => {
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const submit = (e: any) => {
+    e.preventDefault();
+    if (!title || !body) return;
+    dbService.queryAll(`INSERT INTO notes VALUES (?,?,?,?,?)`, [Date.now().toString(), title, body, 'Universal', new Date().toISOString()]);
+    dbService.persist(); setTitle(''); setBody(''); onRefresh();
+  };
+  return (
+    <div className="space-y-10 animate-in slide-in-from-bottom-6 duration-500">
+       <form onSubmit={submit} className="p-10 bg-[#080b12] rounded-[3rem] border border-gray-900 shadow-2xl space-y-4">
+          <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Entry Title..." className="w-full bg-transparent border-none text-2xl font-black placeholder-gray-800 focus:ring-0" />
+          <textarea value={body} onChange={e=>setBody(e.target.value)} placeholder="Encrypt knowledge into ledger..." className="w-full bg-transparent border-none text-gray-400 h-32 focus:ring-0 resize-none" />
+          <div className="flex justify-end"><button type="submit" className="bg-blue-600 px-10 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-xl shadow-blue-900/30">Secure Entry</button></div>
+       </form>
+       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {notes.map((n: any) => (
+            <div key={n.id} className="p-8 bg-[#080b12] border border-gray-900 rounded-[2.5rem] hover:border-gray-700 transition-all group">
+               <h5 className="font-black text-white text-lg mb-2 truncate">{n.title}</h5>
+               <p className="text-gray-500 text-sm line-clamp-3 mb-6">{n.content}</p>
+               <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest text-gray-600">
+                  <span>{n.updatedAt.slice(0, 10)}</span>
+                  <span className="text-blue-500">DECRYPTED</span>
+               </div>
+            </div>
+          ))}
        </div>
     </div>
   );
 };
+
+const SystemLedgerModule = ({hwStats}: any) => (
+  <div className="space-y-8 animate-in slide-in-from-bottom-6 duration-500">
+     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 group">
+           <Terminal className="text-blue-500 mb-6" size={32} />
+           <h4 className="text-xl font-black text-white mb-2">Protocol Node</h4>
+           <p className="text-gray-500 text-xs font-mono">{hwStats?.core || 'Node-3.0'}</p>
+        </div>
+        <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 group">
+           <Cpu className="text-purple-500 mb-6" size={32} />
+           <h4 className="text-xl font-black text-white mb-2">Compute Load</h4>
+           <p className="text-gray-500 text-xs font-mono">{(hwStats?.system?.load?.[0] || 0.0).toFixed(2)} Avg</p>
+        </div>
+        <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 group">
+           <HardDrive className="text-amber-500 mb-6" size={32} />
+           <h4 className="text-xl font-black text-white mb-2">Ledger Health</h4>
+           <p className="text-gray-500 text-xs font-mono">Verified Integrity</p>
+        </div>
+     </div>
+  </div>
+);
 
 // MOUNT
 const rootEl = document.getElementById('root');
