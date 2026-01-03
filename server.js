@@ -39,16 +39,15 @@ app.get('/env.js', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
-    core: 'omnipds-2.0.0-muscle-pro',
+    core: 'omnipds-2.1.0-muscle',
     ai: {
       active: !!process.env.API_KEY,
-      engine: 'gemini-3-pro-preview'
+      tier: 'Tier 1'
     },
     system: {
       platform: os.platform(),
       uptime: process.uptime(),
       load: os.loadavg(),
-      cpus: os.cpus().length,
       memory: {
         total: os.totalmem(),
         free: os.freemem()
@@ -76,9 +75,9 @@ app.post('/api/pds/persist', (req, res) => {
   }
 });
 
-// BULLETPROOF SPA FALLBACK: Avoids Express 5 Path-to-Regexp issues by using standard middleware
+// BULLETPROOF SPA FALLBACK for Express 5
+// This handles all non-API, non-file routes and serves index.html
 app.use((req, res, next) => {
-  // If request is not for API and doesn't look like a file (no extension), serve index.html
   if (!req.path.startsWith('/api') && !req.path.includes('.')) {
     return res.sendFile(path.join(__dirname, 'index.html'));
   }
@@ -88,12 +87,12 @@ app.use((req, res, next) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
   ╔══════════════════════════════════════════════╗
-  ║         OMNIPDS SOVEREIGN CORE v2.0.0        ║
+  ║         OMNIPDS SOVEREIGN CORE v2.1.0        ║
   ║             --- MUSCLE EDITION ---           ║
   ╠══════════════════════════════════════════════╣
   ║ ADDR: http://localhost:${PORT}                 ║
   ║ DB:   omnipds.sqlite                         ║
-  ║ AI:   ${process.env.API_KEY ? 'CONNECTED' : 'OFFLINE'}                     ║
+  ║ AI:   ${process.env.API_KEY ? 'CONNECTED (TIER 1)' : 'OFFLINE'}             ║
   ╚══════════════════════════════════════════════╝
   `);
 });

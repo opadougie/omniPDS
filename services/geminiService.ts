@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import * as dbService from './dbService';
 
-const MODEL = 'gemini-3-pro-preview';
+const MODEL = 'gemini-3-flash-preview';
 
 const tools: FunctionDeclaration[] = [
   {
@@ -38,7 +38,7 @@ export const chatWithPDS = async (history: any[], context: any) => {
       ...history.map(h => ({ role: h.role, parts: h.parts }))
     ],
     config: {
-      systemInstruction: 'You are the OmniPDS Prime Consciousness. Use the queryLedger tool to answer specific questions about the user history.',
+      systemInstruction: 'You are the OmniPDS Prime Consciousness. Use the queryLedger tool to answer specific questions about the user history. Keep responses concise and sovereign.',
       tools: [{ functionDeclarations: tools }]
     }
   });
@@ -65,6 +65,7 @@ export const chatWithPDS = async (history: any[], context: any) => {
 };
 
 export const getPersonalInsights = async (data: any) => {
+  if (!process.env.API_KEY) return { insights: [] };
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const res = await ai.models.generateContent({
     model: MODEL,
@@ -82,6 +83,7 @@ export const getPersonalInsights = async (data: any) => {
 };
 
 export const getSovereignRoadmap = async (data: any) => {
+  if (!process.env.API_KEY) return { roadmap: [] };
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const res = await ai.models.generateContent({
     model: MODEL,
