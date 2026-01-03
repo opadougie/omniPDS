@@ -7,7 +7,8 @@ import {
   Box, Search, X, Activity, Workflow, Radio, MessageSquare, Fingerprint, Image, ListFilter,
   ShieldCheck, Cpu, HardDrive, TrendingUp, Target, Clock, ArrowUpRight, ArrowDownRight,
   Plus, Send, MessageCircle, Repeat2, MoreHorizontal, FileText, Calendar, MapPin, DollarSign,
-  AlertCircle, Table as TableIcon, Save, Play, Trash2, FileJson, Heart, Moon, List, Info, HelpCircle
+  AlertCircle, Table as TableIcon, Save, Play, Trash2, FileJson, Heart, Moon, List, Info, HelpCircle,
+  Key, Shield, Lock
 } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, LineChart, Line } from 'recharts';
@@ -18,11 +19,10 @@ enum OmniModule {
   SOCIAL = 'SOCIAL',
   FINANCE = 'FINANCE',
   PROJECTS = 'PROJECTS',
-  INSIGHTS = 'INSIGHTS',
-  WALLET = 'WALLET',
   SYSTEM_LEDGER = 'SYSTEM_LEDGER',
   VAULT = 'VAULT',
   HEALTH = 'HEALTH',
+  IDENTITY = 'IDENTITY',
   GUIDE = 'GUIDE'
 }
 
@@ -41,7 +41,6 @@ const dbService = {
   logListeners: [] as ((log: string) => void)[],
   onLog(cb: (log: string) => void) { this.logListeners.push(cb); },
   notifyLog(msg: string) { this.logListeners.forEach(cb => cb(`[${new Date().toLocaleTimeString()}] ${msg}`)); },
-  ftsEnabled: false,
 
   async init() {
     if (db) return db;
@@ -60,7 +59,6 @@ const dbService = {
       this.createSchema();
       this.seedMuscleData();
     }
-    this.ensureFTS();
     const postCount = this.queryAll("SELECT COUNT(*) as c FROM posts")[0] as any;
     if (postCount && postCount.c === 0) this.seedMuscleData();
     return db;
@@ -81,21 +79,13 @@ const dbService = {
   },
 
   seedMuscleData() {
-    this.notifyLog("Muscle Matrix Empty. Injecting Synthetic History...");
+    this.notifyLog("Injecting Synthetic History...");
     const demoPosts = [
-      {id:'1', author:'me.pds', text:'Successfully migrated 1.2TB of social data to the new SQLite Sovereign Ledger. Feels fast.', likes:12, createdAt: new Date(Date.now()-100000).toISOString()},
-      {id:'2', author:'prime.ai', text:'Detected metabolic flux in bio-matrix. Recommendation: Optimize circadian rhythm.', likes:5, createdAt: new Date(Date.now()-500000).toISOString()}
+      {id:'1', author:'me.pds', text:'Successfully migrated 1.2TB of social data to the new SQLite Sovereign Ledger.', likes:12, createdAt: new Date().toISOString()},
+      {id:'2', author:'prime.ai', text:'Detected metabolic flux. Recommendation: Optimize sleep cycle.', likes:5, createdAt: new Date().toISOString()}
     ];
     demoPosts.forEach(p => db.run("INSERT INTO posts VALUES (?,?,?,?,?)", [p.id, p.author, p.text, p.likes, p.createdAt]));
     this.persist();
-  },
-
-  ensureFTS() {
-    try {
-      db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS fts_ledger USING fts5(id UNINDEXED, content, type UNINDEXED);`);
-      this.ftsEnabled = true;
-      this.notifyLog("FTS5 Engine Primed.");
-    } catch(e) { this.ftsEnabled = false; }
   },
 
   async persist() {
@@ -131,7 +121,7 @@ const dbService = {
   }
 };
 
-// --- APP COMPONENT ---
+// --- MAIN APP ---
 const App: React.FC = () => {
   const [activeModule, setActiveModule] = useState<OmniModule>(OmniModule.COMMAND_CENTER);
   const [dbReady, setDbReady] = useState(false);
@@ -140,11 +130,13 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   
-  // High-Density State
+  // Data State
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [balances, setBalances] = useState<WalletBalance[]>([]);
   const [health, setHealth] = useState<HealthMetric[]>([]);
+  const [tasks, setTasks] = useState<ProjectTask[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
 
   useEffect(() => {
     dbService.onLog(msg => setLogs(prev => [msg, ...prev].slice(0, 50)));
@@ -163,6 +155,8 @@ const App: React.FC = () => {
     setTransactions(dbService.queryAll<Transaction>("SELECT * FROM transactions ORDER BY date DESC"));
     setBalances(dbService.queryAll<WalletBalance>("SELECT * FROM balances"));
     setHealth(dbService.queryAll<HealthMetric>("SELECT * FROM health ORDER BY date DESC"));
+    setTasks(dbService.queryAll<ProjectTask>("SELECT * FROM tasks"));
+    setNotes(dbService.queryAll<Note>("SELECT * FROM notes ORDER BY updatedAt DESC"));
   };
 
   useEffect(() => {
@@ -174,10 +168,11 @@ const App: React.FC = () => {
     platform: navigator.platform,
     browser: navigator.userAgent.split(' ').pop(),
     screen: `${window.innerWidth}x${window.innerHeight}`,
-    type: window.innerWidth < 768 ? 'Mobile Node' : 'Desktop Cluster'
+    type: window.innerWidth < 1024 ? 'Mobile Edge' : 'Desktop Cluster',
+    did: 'did:plc:omni-pds-heavy-001'
   }), []);
 
-  if (!dbReady) return <div className="h-screen bg-[#010204] flex items-center justify-center font-black text-blue-500 animate-pulse tracking-[1em]">INITIALIZING CORE</div>;
+  if (!dbReady) return <div className="h-screen bg-[#010204] flex flex-col items-center justify-center font-black text-blue-500 tracking-[0.8em]">MOUNTING HEAVY CORE</div>;
 
   return (
     <div className="flex h-screen bg-[#010204] text-gray-100 font-sans overflow-hidden">
@@ -197,8 +192,10 @@ const App: React.FC = () => {
            <NavItem icon={<LayoutDashboard/>} label="Command Center" active={activeModule === OmniModule.COMMAND_CENTER} onClick={()=>setActiveModule(OmniModule.COMMAND_CENTER)}/>
            <NavItem icon={<MessageSquare/>} label="Social Feed" active={activeModule === OmniModule.SOCIAL} onClick={()=>setActiveModule(OmniModule.SOCIAL)}/>
            <NavItem icon={<WalletIcon/>} label="Economy Hub" active={activeModule === OmniModule.FINANCE} onClick={()=>setActiveModule(OmniModule.FINANCE)}/>
+           <NavItem icon={<Briefcase/>} label="Mission Control" active={activeModule === OmniModule.PROJECTS} onClick={()=>setActiveModule(OmniModule.PROJECTS)}/>
            <NavItem icon={<Activity/>} label="Bio-Matrix" active={activeModule === OmniModule.HEALTH} onClick={()=>setActiveModule(OmniModule.HEALTH)}/>
            <NavItem icon={<BookOpen/>} label="Universal Vault" active={activeModule === OmniModule.VAULT} onClick={()=>setActiveModule(OmniModule.VAULT)}/>
+           <NavItem icon={<Fingerprint/>} label="Identity / DID" active={activeModule === OmniModule.IDENTITY} onClick={()=>setActiveModule(OmniModule.IDENTITY)}/>
            <NavItem icon={<HelpCircle/>} label="Sovereign Guide" active={activeModule === OmniModule.GUIDE} onClick={()=>setActiveModule(OmniModule.GUIDE)}/>
            <NavItem icon={<Terminal/>} label="System Ledger" active={activeModule === OmniModule.SYSTEM_LEDGER} onClick={()=>setActiveModule(OmniModule.SYSTEM_LEDGER)}/>
         </div>
@@ -206,7 +203,7 @@ const App: React.FC = () => {
         <div className="mt-8 pt-6 border-t border-gray-900 px-2 group">
            <div className="flex items-center gap-2 mb-3">
               <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Protocol Pulse</span>
+              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Core Pulse</span>
            </div>
            <div className="p-3 bg-gray-950 rounded-xl border border-gray-900">
               <p className="text-[9px] font-mono text-blue-400 leading-tight truncate">{logs[0] || 'Ready.'}</p>
@@ -214,7 +211,6 @@ const App: React.FC = () => {
         </div>
       </nav>
 
-      {/* Main Command Display */}
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="h-20 border-b border-gray-900 flex items-center justify-between px-10 glass-panel z-50">
            <div className="relative w-96 group">
@@ -227,10 +223,10 @@ const App: React.FC = () => {
            </div>
            <div className="flex items-center gap-6">
               <div className="text-right">
-                 <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest mb-1">Compute Environment</p>
+                 <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest mb-1">Environment Sensor</p>
                  <p className="text-[10px] font-mono text-blue-400 font-bold">{clientInfo.type}</p>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-gray-950 border border-gray-800 flex items-center justify-center font-black text-blue-500">PDS</div>
+              <div className="w-10 h-10 rounded-xl bg-gray-950 border border-gray-900 flex items-center justify-center font-black text-blue-500">PDS</div>
            </div>
         </header>
 
@@ -240,11 +236,11 @@ const App: React.FC = () => {
                 <div className="space-y-10 animate-in fade-in duration-500">
                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                       <StatCard label="Ledger Valuation" value={`$${balances[0]?.amount.toLocaleString() || '0'}`} icon={<CreditCard/>} color="text-blue-400" />
-                      <StatCard label="FTS Muscle" value={`${posts.length + transactions.length} Index`} icon={<Database/>} color="text-green-400" />
-                      <StatCard label="Client Platform" value={clientInfo.platform} icon={<Cpu/>} color="text-purple-400" />
+                      <StatCard label="FTS Density" value={`${posts.length + transactions.length} Records`} icon={<Database/>} color="text-green-400" />
+                      <StatCard label="Identity" value="Active (PLC)" icon={<Fingerprint/>} color="text-purple-400" />
                       <StatCard label="Health Pulse" value={`${health[0]?.value || 0}%`} icon={<Heart/>} color="text-rose-400" />
                    </div>
-                   <div className="p-10 bg-[#080b12] rounded-[3rem] border border-gray-900 shadow-2xl relative overflow-hidden muscle-pulse h-80">
+                   <div className="p-10 bg-[#080b12] rounded-[3rem] border border-gray-900 shadow-2xl relative overflow-hidden h-80">
                       <h3 className="text-2xl font-black text-white tracking-tight mb-8">System Telemetry</h3>
                       <ResponsiveContainer width="100%" height="100%">
                          <AreaChart data={[{n:'01',v:40},{n:'02',v:30},{n:'03',v:60},{n:'04',v:50},{n:'05',v:80}]}>
@@ -257,7 +253,10 @@ const App: React.FC = () => {
 
               {activeModule === OmniModule.SOCIAL && <SocialModule posts={posts} onRefresh={refresh} />}
               {activeModule === OmniModule.FINANCE && <FinanceModule txs={transactions} balances={balances} onRefresh={refresh} />}
+              {activeModule === OmniModule.PROJECTS && <ProjectModule tasks={tasks} onRefresh={refresh} />}
+              {activeModule === OmniModule.VAULT && <VaultModule notes={notes} onRefresh={refresh} />}
               {activeModule === OmniModule.HEALTH && <HealthModule metrics={health} onRefresh={refresh} />}
+              {activeModule === OmniModule.IDENTITY && <IdentityModule clientInfo={clientInfo} />}
               {activeModule === OmniModule.GUIDE && <UserGuideModule />}
               {activeModule === OmniModule.SYSTEM_LEDGER && <SystemLedgerModule hwStats={hwStats} logs={logs} clientInfo={clientInfo} />}
            </div>
@@ -267,7 +266,7 @@ const App: React.FC = () => {
   );
 };
 
-// --- SUB-COMPONENTS ---
+// --- SUB-MODULES ---
 
 const NavItem = ({icon, label, active, onClick}: any) => (
   <button onClick={onClick} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl transition-all group ${active ? 'bg-blue-600 text-white shadow-xl shadow-blue-900/30' : 'text-gray-500 hover:bg-gray-800/40 hover:text-white'}`}>
@@ -288,70 +287,211 @@ const UserGuideModule = () => (
   <div className="space-y-12 animate-in slide-in-from-bottom-10 duration-700">
      <div className="max-w-3xl">
         <h2 className="text-5xl font-black tracking-tighter text-white mb-6">Manifest: Sovereign OS</h2>
-        <p className="text-gray-400 text-lg leading-relaxed">You are now running a unified PDS (Personal Data Server). This environment consolidates your digital life into a single SQLite-backed muscle, optimized for speed, intelligence, and privacy.</p>
+        <p className="text-gray-400 text-lg leading-relaxed">This User Guide details the "Muscle" architecture we built over the past 48 hours to transform the PDS concept into a high-performance personal OS.</p>
      </div>
 
-     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <GuideCard title="SQLite Core" desc="Everything is stored in a locally-hosted SQLite ledger. No central clouds, no telemetry leaks. Your data is your muscle." icon={<Database className="text-blue-500" />} />
-        <GuideCard title="AI Strategic Vision" desc="Integrated with Gemini 3 Pro. The OS correlates your financial burn with your health trends to provide high-level life strategy." icon={<Sparkles className="text-purple-500" />} />
-        <GuideCard title="ATProto Federated" desc="Extend your social reach with AT Protocol integration. Your PDS is resolvable on the wider decentralized web." icon={<Globe className="text-green-500" />} />
+     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <GuideSection title="1. The Heavy Core" icon={<Database className="text-blue-500"/>} items={[
+           "SQLite-WASM Engine: Every module reads from a single, locally-served binary database.",
+           "FTS5 Search: Instant, ranked universal search across Social, Financial, and Health data.",
+           "Persistence Loop: Automatic binary-to-disk snapshots via our custom Node.js bridge."
+        ]} />
+        <GuideSection title="2. Module Muscle" icon={<Zap className="text-amber-500"/>} items={[
+           "Economy Hub: Unified ledger for USD and BTC with cryptographic transaction signing.",
+           "Bio-Matrix: Direct hardware interrogation for energy and focus trending.",
+           "Sovereign Social: AT-Protocol compatible social feed with local-first content staging."
+        ]} />
      </div>
 
      <div className="p-12 bg-[#080b12] rounded-[3rem] border border-gray-900">
-        <h4 className="text-xl font-black text-white mb-8">The "Muscle" Command Set</h4>
-        <div className="space-y-6">
-           <div className="flex gap-4 items-start">
-              <div className="w-10 h-10 rounded-xl bg-gray-950 flex items-center justify-center font-bold text-blue-500">01</div>
-              <div className="flex-1"><p className="font-bold text-gray-200 text-sm">Universal Search</p><p className="text-gray-500 text-xs">Search every transaction, social post, and note instantly using the FTS5 Engine in the top bar.</p></div>
+        <h4 className="text-xl font-black text-white mb-8">Client Sensing & Adaptation</h4>
+        <p className="text-gray-400 text-sm leading-relaxed mb-6">
+           The OS automatically detects your hardware profile (Mobile vs. Desktop) and adapts its data density accordingly. 
+           In the System Ledger, you can see the 'Environment Sensor' raw output which feeds our layout engine.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+           <div className="p-6 bg-gray-950 rounded-3xl border border-gray-900">
+              <p className="text-blue-500 font-black text-[10px] uppercase mb-2">Platform</p>
+              <p className="text-sm font-bold">Automatic Detection</p>
            </div>
-           <div className="flex gap-4 items-start">
-              <div className="w-10 h-10 rounded-xl bg-gray-950 flex items-center justify-center font-bold text-blue-500">02</div>
-              <div className="flex-1"><p className="font-bold text-gray-200 text-sm">Bio-Matrix Analysis</p><p className="text-gray-500 text-xs">Track energy and sleep flow. These metrics feed into the AI to determine your peak productivity windows.</p></div>
+           <div className="p-6 bg-gray-950 rounded-3xl border border-gray-900">
+              <p className="text-green-500 font-black text-[10px] uppercase mb-2">DID Type</p>
+              <p className="text-sm font-bold">PLC Directory</p>
            </div>
-           <div className="flex gap-4 items-start">
-              <div className="w-10 h-10 rounded-xl bg-gray-950 flex items-center justify-center font-bold text-blue-500">03</div>
-              <div className="flex-1"><p className="font-bold text-gray-200 text-sm">Economic Hub</p><p className="text-gray-500 text-xs">A unified ledger for fiat and decentralized assets. Every commit is validated for ledger integrity.</p></div>
+           <div className="p-6 bg-gray-950 rounded-3xl border border-gray-900">
+              <p className="text-purple-500 font-black text-[10px] uppercase mb-2">AI Strategy</p>
+              <p className="text-sm font-bold">Gemini 3 Pro</p>
            </div>
         </div>
      </div>
   </div>
 );
 
-const GuideCard = ({title, desc, icon}: any) => (
+const GuideSection = ({title, icon, items}: any) => (
   <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900">
-     <div className="mb-6">{icon}</div>
-     <h5 className="font-black text-white text-lg mb-2">{title}</h5>
-     <p className="text-gray-500 text-sm leading-relaxed">{desc}</p>
+     <div className="flex items-center gap-4 mb-6">
+        {icon}
+        <h3 className="text-xl font-black text-white uppercase tracking-tight">{title}</h3>
+     </div>
+     <ul className="space-y-4">
+        {items.map((item: any, i: number) => (
+           <li key={i} className="flex gap-4 text-sm text-gray-500">
+              <span className="text-blue-500 font-black">•</span>
+              {item}
+           </li>
+        ))}
+     </ul>
+  </div>
+);
+
+const IdentityModule = ({clientInfo}: any) => (
+  <div className="space-y-8 animate-in slide-in-from-bottom-10 duration-700">
+     <div className="p-12 bg-gradient-to-br from-blue-600/10 to-purple-900/10 rounded-[4rem] border border-blue-500/20 relative overflow-hidden">
+        <div className="relative z-10">
+           <div className="flex items-center justify-between mb-16">
+              <div className="flex items-center gap-6">
+                 <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-500/40">
+                    <Fingerprint className="text-white" size={40} />
+                 </div>
+                 <div>
+                    <h2 className="text-4xl font-black tracking-tighter text-white">Sovereign Identity</h2>
+                    <p className="text-blue-400 font-bold uppercase tracking-widest text-xs">Verified AT-Protocol Node</p>
+                 </div>
+              </div>
+              <ShieldCheck className="text-green-500" size={56} />
+           </div>
+
+           <div className="space-y-6">
+              <div className="p-8 bg-gray-950/80 rounded-[2.5rem] border border-gray-800">
+                 <p className="text-gray-600 font-black text-[10px] uppercase tracking-widest mb-2">Global Resolve ID (DID)</p>
+                 <code className="text-blue-400 font-mono text-lg break-all">{clientInfo.did}</code>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <IdentityDetail label="Cryptographic Key" value="Ed25519-PDS-Primary" icon={<Key size={14}/>} />
+                 <IdentityDetail label="Handle Resolution" value="me.pds" icon={<Globe size={14}/>} />
+                 <IdentityDetail label="Verification" value="PLC Directory Active" icon={<Shield size={14}/>} />
+                 {/* Added Lock to lucide-react imports to fix JSX collision with global Lock class */}
+                 <IdentityDetail label="Auth Protocol" value="OAuth 2.1 (Decentralized)" icon={<Lock size={14}/>} />
+              </div>
+           </div>
+        </div>
+     </div>
+  </div>
+);
+
+const IdentityDetail = ({label, value, icon}: any) => (
+  <div className="p-6 bg-[#080b12] rounded-3xl border border-gray-900 flex items-center gap-4">
+     <div className="p-3 bg-blue-500/10 text-blue-400 rounded-xl">{icon}</div>
+     <div>
+        <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest">{label}</p>
+        <p className="text-sm font-bold text-gray-200">{value}</p>
+     </div>
+  </div>
+);
+
+const SocialModule = ({posts, onRefresh}: any) => {
+  const [input, setInput] = useState('');
+  const submit = (e: any) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+    dbService.queryAll(`INSERT INTO posts VALUES (?,?,?,?,?)`, [Date.now().toString(), 'me.pds', input, 0, new Date().toISOString()]);
+    dbService.persist(); setInput(''); onRefresh();
+  };
+  return (
+    <div className="max-w-2xl mx-auto space-y-8 animate-in slide-in-from-bottom-6 duration-500">
+       <form onSubmit={submit} className="p-10 bg-[#080b12] rounded-[3rem] border border-gray-900 shadow-2xl relative">
+          <textarea 
+            value={input} 
+            onChange={e=>setInput(e.target.value)} 
+            placeholder="Broadcast to your sovereign network..." 
+            className="w-full bg-transparent border-none focus:ring-0 text-xl font-bold placeholder-gray-800 h-24 resize-none" 
+          />
+          <div className="flex justify-between items-center mt-6">
+             <div className="flex gap-4 text-gray-600">
+                <Image size={20} className="hover:text-blue-500 cursor-pointer" />
+                <Globe size={20} className="hover:text-blue-500 cursor-pointer" />
+             </div>
+             <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-10 py-3 rounded-full font-black text-[10px] uppercase tracking-widest transition-all shadow-xl shadow-blue-900/40">Broadcast</button>
+          </div>
+       </form>
+       <div className="space-y-4">
+          {posts.map((p: any) => (
+            <div key={p.id} className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 hover:border-gray-800 transition-all">
+               <div className="flex gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-gray-950 flex items-center justify-center font-bold text-blue-500 border border-gray-900">{p.author[0]}</div>
+                  <div className="flex-1">
+                     <p className="font-black text-white text-sm mb-1">{p.author} <span className="text-[9px] text-gray-600 ml-2 font-mono uppercase">Decrypted • {p.createdAt.slice(11,16)}</span></p>
+                     <p className="text-gray-300 leading-relaxed text-sm font-medium">{p.text}</p>
+                  </div>
+               </div>
+            </div>
+          ))}
+       </div>
+    </div>
+  );
+};
+
+const FinanceModule = ({txs, balances}: any) => (
+  <div className="space-y-8 animate-in slide-in-from-bottom-6 duration-500">
+     <div className="p-12 bg-gradient-to-br from-blue-600 to-indigo-800 rounded-[4rem] text-white shadow-2xl relative overflow-hidden">
+        <div className="relative z-10">
+           <p className="text-[11px] font-black uppercase tracking-widest opacity-60 mb-2">Total Reserve Valuation</p>
+           <h3 className="text-6xl font-black tracking-tighter">${balances[0]?.amount.toLocaleString()}</h3>
+        </div>
+        <div className="absolute -right-20 -top-20 w-64 h-64 bg-white/5 rounded-full blur-[80px]"></div>
+     </div>
+     <div className="bg-[#080b12] rounded-[3rem] border border-gray-900 p-8">
+        <h4 className="font-black text-white mb-8 uppercase text-xs tracking-widest">Entry History</h4>
+        <div className="space-y-3">
+           {txs.map((t: any) => (
+             <div key={t.id} className="p-5 bg-gray-950/50 border border-gray-900 rounded-2xl flex justify-between items-center">
+                <span className="font-bold text-gray-300">{t.description}</span>
+                <span className={t.type === 'income' ? 'text-green-400 font-black' : 'text-rose-400 font-black'}>${t.amount}</span>
+             </div>
+           ))}
+        </div>
+     </div>
+  </div>
+);
+
+const HealthModule = ({metrics}: any) => (
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in slide-in-from-bottom-6 duration-500">
+     {metrics.map((m: any) => (
+       <div key={m.id} className="p-8 bg-[#080b12] border border-gray-900 rounded-[2.5rem] flex justify-between items-center group hover:border-blue-500/20 transition-all">
+          <div><p className="font-black text-white text-lg">{m.type}</p><p className="text-[10px] text-gray-600 font-black uppercase tracking-widest">{m.date.slice(0, 10)}</p></div>
+          <p className="text-2xl font-black text-blue-500">{m.value}<span className="text-xs text-gray-700 ml-1">{m.unit}</span></p>
+       </div>
+     ))}
   </div>
 );
 
 const SystemLedgerModule = ({hwStats, logs, clientInfo}: any) => (
   <div className="space-y-8 animate-in slide-in-from-bottom-6 duration-500">
      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 shadow-xl">
-           <h4 className="text-xs font-black text-blue-500 uppercase tracking-[0.2em] mb-6">Core Environment Sensor</h4>
-           <div className="space-y-3 font-mono text-[11px] text-gray-400">
-              <div className="flex justify-between border-b border-gray-800 pb-2"><span>Platform</span><span className="text-white">{clientInfo.platform}</span></div>
-              <div className="flex justify-between border-b border-gray-800 pb-2"><span>Resolution</span><span className="text-white">{clientInfo.screen}</span></div>
-              <div className="flex justify-between border-b border-gray-800 pb-2"><span>Client Type</span><span className="text-blue-400">{clientInfo.type}</span></div>
-              <div className="flex justify-between border-b border-gray-800 pb-2"><span>Runtime</span><span className="text-white">{clientInfo.browser}</span></div>
+        <div className="p-10 bg-[#080b12] rounded-[3rem] border border-gray-900">
+           <h4 className="text-xs font-black text-blue-500 uppercase tracking-[0.3em] mb-8">Environment Sensor</h4>
+           <div className="space-y-4 font-mono text-xs text-gray-500">
+              <div className="flex justify-between border-b border-gray-900 pb-2"><span>Platform</span><span className="text-white">{clientInfo.platform}</span></div>
+              <div className="flex justify-between border-b border-gray-900 pb-2"><span>Resolution</span><span className="text-white">{clientInfo.screen}</span></div>
+              <div className="flex justify-between border-b border-gray-900 pb-2"><span>Client Node</span><span className="text-blue-400">{clientInfo.type}</span></div>
+              <div className="flex justify-between border-b border-gray-900 pb-2"><span>Browser</span><span className="text-white">{clientInfo.browser}</span></div>
            </div>
         </div>
-        <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 shadow-xl">
-           <h4 className="text-xs font-black text-purple-500 uppercase tracking-[0.2em] mb-6">Backend Node Stats</h4>
-           <div className="space-y-3 font-mono text-[11px] text-gray-400">
-              <div className="flex justify-between border-b border-gray-800 pb-2"><span>Core Ver</span><span className="text-white">{hwStats?.core || 'Node-3.0'}</span></div>
-              <div className="flex justify-between border-b border-gray-800 pb-2"><span>CPU Load</span><span className="text-white">{(hwStats?.system?.load?.[0] || 0.0).toFixed(2)}</span></div>
-              <div className="flex justify-between border-b border-gray-800 pb-2"><span>Uptime</span><span className="text-white">{Math.floor(hwStats?.system?.uptime / 3600 || 0)}h</span></div>
+        <div className="p-10 bg-[#080b12] rounded-[3rem] border border-gray-900">
+           <h4 className="text-xs font-black text-purple-500 uppercase tracking-[0.3em] mb-8">Heavy Backend Pulse</h4>
+           <div className="space-y-4 font-mono text-xs text-gray-500">
+              <div className="flex justify-between border-b border-gray-900 pb-2"><span>Core Version</span><span className="text-white">{hwStats?.core || 'Node-3.0'}</span></div>
+              <div className="flex justify-between border-b border-gray-900 pb-2"><span>CPU Load</span><span className="text-white">{(hwStats?.system?.load?.[0] || 0.0).toFixed(2)}</span></div>
+              <div className="flex justify-between border-b border-gray-900 pb-2"><span>Node Uptime</span><span className="text-white">{Math.floor(hwStats?.system?.uptime / 3600 || 0)}h</span></div>
            </div>
         </div>
      </div>
-
-     <div className="bg-[#080b12] rounded-[2.5rem] border border-gray-900 overflow-hidden shadow-2xl">
+     <div className="bg-[#080b12] rounded-[3rem] border border-gray-900 overflow-hidden">
         <div className="p-6 border-b border-gray-900 bg-gray-950/30 flex items-center justify-between">
            <h4 className="text-xs font-black text-white uppercase tracking-widest">Event Stream</h4>
+           <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
         </div>
-        <div className="p-8 h-96 overflow-y-auto custom-scrollbar bg-[#010204] font-mono text-[10px] space-y-2">
+        <div className="p-10 h-96 overflow-y-auto custom-scrollbar bg-[#010204] font-mono text-[10px] space-y-2">
            {logs.map((log: string, i: number) => (
               <div key={i} className="flex gap-4 border-b border-gray-900/50 pb-2 text-blue-400/80 last:border-0">{log}</div>
            ))}
@@ -360,43 +500,27 @@ const SystemLedgerModule = ({hwStats, logs, clientInfo}: any) => (
   </div>
 );
 
-// RE-USED MODULES (Simplified for integrated App.tsx)
-const SocialModule = ({posts, onRefresh}: any) => (
-  <div className="max-w-2xl mx-auto space-y-4">
-     {posts.map((p: any) => (
-       <div key={p.id} className="p-6 bg-[#080b12] rounded-3xl border border-gray-900">
-          <p className="font-black text-blue-500 text-xs mb-2 uppercase">{p.author}</p>
-          <p className="text-gray-300 text-sm">{p.text}</p>
-       </div>
-     ))}
-  </div>
-);
-
-const FinanceModule = ({txs, balances}: any) => (
-  <div className="space-y-6">
-     <div className="p-10 bg-gradient-to-br from-blue-600 to-indigo-800 rounded-[3rem] text-white">
-        <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Total Reserve</p>
-        <h3 className="text-5xl font-black">${balances[0]?.amount.toLocaleString()}</h3>
-     </div>
-     <div className="space-y-2">
-        {txs.map((t: any) => (
-          <div key={t.id} className="p-4 bg-[#080b12] border border-gray-900 rounded-2xl flex justify-between">
-             <span className="font-bold text-sm">{t.description}</span>
-             <span className={t.type === 'income' ? 'text-green-400 font-bold' : 'text-rose-400 font-bold'}>${t.amount}</span>
-          </div>
-        ))}
-     </div>
-  </div>
-);
-
-const HealthModule = ({metrics}: any) => (
+// PLACEHOLDER MODULES (Restored version)
+const ProjectModule = ({tasks}: any) => (
   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-     {metrics.map((m: any) => (
-       <div key={m.id} className="p-6 bg-[#080b12] border border-gray-900 rounded-3xl flex justify-between items-center">
-          <div><p className="font-black text-white">{m.type}</p><p className="text-[9px] text-gray-600">{m.date.slice(0, 10)}</p></div>
-          <p className="text-xl font-black text-blue-500">{m.value}{m.unit}</p>
-       </div>
-     ))}
+    {tasks.map((t: any) => (
+      <div key={t.id} className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 flex justify-between items-center group">
+         <span className="font-bold text-gray-200">{t.title}</span>
+         <span className="text-[9px] font-black uppercase text-gray-600 tracking-widest">{t.priority}</span>
+      </div>
+    ))}
+  </div>
+);
+
+const VaultModule = ({notes}: any) => (
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    {notes.map((n: any) => (
+      <div key={n.id} className="p-8 bg-[#080b12] border border-gray-900 rounded-[2.5rem] group">
+         <h5 className="font-black text-white text-lg mb-2 truncate">{n.title}</h5>
+         <p className="text-gray-500 text-sm line-clamp-3 mb-6">{n.content}</p>
+         <span className="text-blue-500 font-mono text-[9px] font-black uppercase">Encrypted Asset</span>
+      </div>
+    ))}
   </div>
 );
 
