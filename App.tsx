@@ -220,7 +220,9 @@ const App: React.FC = () => {
   );
 };
 
-// Mount the app directly in the entry point file
+// DIRECT MOUNTING TO ROOT
+// This avoids the "Unexpected token <" error by ensuring Babel processes this code
+// before any browser-native execution.
 const rootElement = document.getElementById('root');
 if (rootElement) {
   const root = createRoot(rootElement);

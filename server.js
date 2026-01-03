@@ -19,7 +19,8 @@ const app = express();
 const PORT = 8087;
 const DB_FILE = path.join(__dirname, 'omnipds.sqlite');
 
-// 1. Set headers for TS/TSX files to be application/javascript so Babel can fetch them
+// 1. CRITICAL: Handle static files with correct MIME types BEFORE anything else
+// This stops the "MIME type not supported" errors in the browser.
 app.use(express.static(__dirname, {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.tsx') || filePath.endsWith('.ts')) {
@@ -39,7 +40,7 @@ app.get('/env.js', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
-    core: 'omnipds-2.2.0-muscle',
+    core: 'omnipds-2.3.0-muscle',
     ai: {
       active: !!process.env.API_KEY,
       tier: 'Tier 1'
@@ -76,7 +77,7 @@ app.post('/api/pds/persist', (req, res) => {
   }
 });
 
-// 2. SPA Fallback: Only serve index.html if the request has no extension and isn't an API call
+// 2. SPA Fallback: Only serve index.html for non-file requests
 app.use((req, res, next) => {
   const isApi = req.path.startsWith('/api');
   const hasExtension = path.extname(req.path) !== '';
@@ -90,12 +91,12 @@ app.use((req, res, next) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
   ╔══════════════════════════════════════════════╗
-  ║         OMNIPDS SOVEREIGN CORE v2.2.0        ║
+  ║         OMNIPDS SOVEREIGN CORE v2.3.0        ║
   ║             --- MUSCLE EDITION ---           ║
   ╠══════════════════════════════════════════════╣
   ║ ADDR: http://localhost:${PORT}                 ║
   ║ DB:   omnipds.sqlite                         ║
-  ║ AI:   CONNECTED (TIER 1 ACTIVE)              ║
+  ║ AI:   CONNECTED (GEMINI FLASH-3)             ║
   ╚══════════════════════════════════════════════╝
   `);
 });

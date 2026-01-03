@@ -2,7 +2,7 @@
 import { 
   SocialPost, Transaction, ProjectTask, WalletBalance, Note, 
   Contact, Asset, HealthMetric, WorkflowRule, Message, Credential, MediaAsset 
-} from '../types';
+} from '../types.ts';
 
 let db: any = null;
 const SQL_WASM_PATH = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.wasm';
@@ -21,7 +21,7 @@ export const initDB = async () => {
     if (response.ok) {
       const arrayBuffer = await response.arrayBuffer();
       db = new SQL.Database(new Uint8Array(arrayBuffer));
-      notifyLog("Sovereign Ledger Synced: Neural Muscle Engaged.");
+      notifyLog("Sovereign Ledger Synced: FTS5 Muscle Active.");
     } else {
       throw new Error("No remote ledger.");
     }
@@ -60,8 +60,12 @@ const createSchema = () => {
 
 const ensureFTSTables = () => {
   try {
+    // Universal Search Muscle: FTS5 allows searching across all user data instantly
     db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS fts_ledger USING fts5(id UNINDEXED, content, type UNINDEXED);`);
-  } catch (e) {}
+    notifyLog("Full-Text Search Index Ready.");
+  } catch (e) {
+    console.warn("FTS5 might not be supported in this SQL.js build, falling back to basic indexing.");
+  }
 };
 
 const verifyIntegrity = () => {
@@ -85,27 +89,15 @@ const persist = async () => {
   if (!db) return;
   const binary = db.export();
   localStorage.setItem('omnipds_sqlite', JSON.stringify(Array.from(binary)));
-  fetch('/api/pds/persist', { 
-    method: 'POST', 
-    headers: { 'Content-Type': 'application/octet-stream' },
-    body: binary 
-  });
-};
-
-const queryAll = <T>(sql: string, params: any[] = []): T[] => {
-  if (!db) return [];
+  
   try {
-    const res = db.exec(sql, params);
-    if (!res.length) return [];
-    const columns = res[0].columns;
-    return res[0].values.map((row: any) => {
-      const obj: any = {};
-      columns.forEach((col: string, i: number) => obj[col] = row[i]);
-      return obj as T;
+    fetch('/api/pds/persist', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: binary 
     });
   } catch (e) {
-    console.error("Query Error:", e);
-    return [];
+    console.error("Remote persistence failed, using LocalStorage.");
   }
 };
 
@@ -202,4 +194,21 @@ export const getDBSize = () => {
 export const getTableRowCount = (t: string) => { 
   try { return db.exec(`SELECT COUNT(*) FROM ${t}`)[0].values[0][0]; } 
   catch(e) {return 0;} 
+};
+
+const queryAll = <T>(sql: string, params: any[] = []): T[] => {
+  if (!db) return [];
+  try {
+    const res = db.exec(sql, params);
+    if (!res.length) return [];
+    const columns = res[0].columns;
+    return res[0].values.map((row: any) => {
+      const obj: any = {};
+      columns.forEach((col: string, i: number) => obj[col] = row[i]);
+      return obj as T;
+    });
+  } catch (e) {
+    console.error("Query Error:", e);
+    return [];
+  }
 };

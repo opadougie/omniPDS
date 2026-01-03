@@ -29,6 +29,9 @@
           50% { transform: scale(1.005); opacity: 0.95; }
         }
         .muscle-pulse { animation: muscle-pulse 10s infinite ease-in-out; }
+        
+        /* Fix for potential black screen by ensuring visibility */
+        #root { min-height: 100vh; display: flex; flex-direction: column; }
     </style>
 <script type="importmap">
 {
@@ -55,9 +58,9 @@
 <body>
     <div id="root"></div>
     <!-- 
-      We load App.tsx directly. 
-      To fix the "Unexpected token <" error, we must ensure Babel transforms the entry file correctly.
-      By using data-presets="react,typescript", Babel-standalone will handle JSX and TS features.
+      We load App.tsx as the entry point. 
+      The data-presets="react,typescript" is CRITICAL for Babel to transform JSX/TS.
+      The data-type="module" allows Babel to handle the import statements.
     -->
     <script type="text/babel" data-type="module" data-presets="react,typescript" src="App.tsx"></script>
 </body>
