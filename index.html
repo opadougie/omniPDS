@@ -22,6 +22,13 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: #02040a; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #111827; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
+        
+        /* Muscle UI Animations */
+        @keyframes pulse-subtle {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
+        }
+        .muscle-pulse { animation: pulse-subtle 4s infinite ease-in-out; }
     </style>
 <script type="importmap">
 {

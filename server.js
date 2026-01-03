@@ -19,9 +19,10 @@ const app = express();
 const PORT = 8087;
 const DB_FILE = path.join(__dirname, 'omnipds.sqlite');
 
-// Static file serving with explicit MIME types for browser module support
+// Static middleware - Serve all files from root
 app.use(express.static(__dirname, {
   setHeaders: (res, filePath) => {
+    // Force JS mime type for TypeScript files so Babel can parse them
     if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
       res.setHeader('Content-Type', 'application/javascript');
     }
@@ -39,15 +40,19 @@ app.get('/env.js', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
-    core: 'OmniPDS 1.5.0-MUSCLE',
+    core: 'omnipds-1.8.0-muscle',
     ai: {
       active: !!process.env.API_KEY,
-      model: 'gemini-3-pro-preview'
+      engine: 'gemini-3-pro-preview'
     },
     system: {
       platform: os.platform(),
       uptime: process.uptime(),
-      load: os.loadavg()
+      load: os.loadavg(),
+      memory: {
+        total: os.totalmem(),
+        free: os.freemem()
+      }
     }
   });
 });
@@ -62,22 +67,34 @@ app.get('/api/pds/load', (req, res) => {
 
 app.post('/api/pds/persist', (req, res) => {
   try {
-    if (!req.body || req.body.length === 0) throw new Error("Empty body");
+    if (!req.body || req.body.length === 0) throw new Error("Persistence stream empty");
     fs.writeFileSync(DB_FILE, req.body);
     res.sendStatus(200);
   } catch (e) {
+    console.error("[OmniPDS] Persist Error:", e.message);
     res.status(500).send(e.message);
   }
 });
 
-// Express 5 compatible catch-all route
+// Express 5 / path-to-regexp v8 Fixed Fallback
+// Using '*' as the most robust catch-all in Express 5
 app.get('*', (req, res, next) => {
+  // If it's a request for an API route or a file with an extension that wasn't found, pass it on
   if (req.path.startsWith('/api') || req.path.includes('.')) {
     return next();
   }
+  // Otherwise, serve index.html for SPA routing
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n  [OMNIPDS CORE] Active on http://localhost:${PORT}\n`);
+  console.log(`
+  ╔══════════════════════════════════════════════╗
+  ║         OMNIPDS SOVEREIGN CORE v1.8.0        ║
+  ╠══════════════════════════════════════════════╣
+  ║ ADDR: http://localhost:${PORT}                 ║
+  ║ DB:   omnipds.sqlite                         ║
+  ║ AI:   ${process.env.API_KEY ? 'CONNECTED' : 'OFFLINE'}                     ║
+  ╚══════════════════════════════════════════════╝
+  `);
 });
