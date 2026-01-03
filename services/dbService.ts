@@ -1,4 +1,3 @@
-
 import { 
   SocialPost, Transaction, ProjectTask, WalletBalance, Note, 
   Contact, Asset, HealthMetric, WorkflowRule, Message, Credential, MediaAsset 
@@ -10,6 +9,24 @@ const SQL_WASM_PATH = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-
 let logListeners: ((log: string) => void)[] = [];
 export const onLog = (cb: (log: string) => void) => logListeners.push(cb);
 const notifyLog = (msg: string) => logListeners.forEach(cb => cb(`[${new Date().toLocaleTimeString()}] ${msg}`));
+
+// Moved queryAll to the top to ensure generic type information is available for earlier exports
+const queryAll = <T>(sql: string, params: any[] = []): T[] => {
+  if (!db) return [];
+  try {
+    const res = db.exec(sql, params);
+    if (!res.length) return [];
+    const columns = res[0].columns;
+    return res[0].values.map((row: any) => {
+      const obj: any = {};
+      columns.forEach((col: string, i: number) => obj[col] = row[i]);
+      return obj as T;
+    });
+  } catch (e) {
+    console.error("Query Error:", e);
+    return [];
+  }
+};
 
 export const initDB = async () => {
   if (db) return db;
@@ -180,7 +197,7 @@ export const executeRawSQL = (sql: string) => {
     persist();
     return { success: true, data: res }; 
   }
-  catch (e) { return { success: false, error: e.message }; }
+  catch (e: any) { return { success: false, error: e.message }; }
 };
 
 export const getDBSize = () => {
@@ -194,21 +211,4 @@ export const getDBSize = () => {
 export const getTableRowCount = (t: string) => { 
   try { return db.exec(`SELECT COUNT(*) FROM ${t}`)[0].values[0][0]; } 
   catch(e) {return 0;} 
-};
-
-const queryAll = <T>(sql: string, params: any[] = []): T[] => {
-  if (!db) return [];
-  try {
-    const res = db.exec(sql, params);
-    if (!res.length) return [];
-    const columns = res[0].columns;
-    return res[0].values.map((row: any) => {
-      const obj: any = {};
-      columns.forEach((col: string, i: number) => obj[col] = row[i]);
-      return obj as T;
-    });
-  } catch (e) {
-    console.error("Query Error:", e);
-    return [];
-  }
 };

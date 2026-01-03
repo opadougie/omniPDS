@@ -1,8 +1,8 @@
-
 import { GoogleGenAI, Type, FunctionDeclaration } from "@google/genai";
 import * as dbService from './dbService';
 
-const MODEL = 'gemini-3-flash-preview';
+// Updated to gemini-3-pro-preview for complex reasoning tasks like SQL generation
+const MODEL = 'gemini-3-pro-preview';
 
 const tools: FunctionDeclaration[] = [
   {
@@ -30,6 +30,7 @@ const tools: FunctionDeclaration[] = [
 ];
 
 export const chatWithPDS = async (history: any[], context: any) => {
+  // Correctly using process.env.API_KEY with named parameter
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: MODEL,
@@ -53,10 +54,12 @@ export const chatWithPDS = async (history: any[], context: any) => {
         result = JSON.stringify(dbService.universalSearch(call.args.term as string));
       }
 
+      // Re-initialize for follow-up content generation
       const final = await ai.models.generateContent({
         model: MODEL,
         contents: [{ role: 'user', parts: [{ text: `Result for ${call.name}: ${result}` }] }]
       });
+      // Correctly access .text property
       return final.text;
     }
   }
@@ -79,6 +82,7 @@ export const getPersonalInsights = async (data: any) => {
       }
     }}
   });
+  // Correctly access .text property
   return JSON.parse(res.text || '{"insights":[]}');
 };
 
@@ -97,5 +101,6 @@ export const getSovereignRoadmap = async (data: any) => {
       }
     }}
   });
+  // Correctly access .text property
   return JSON.parse(res.text || '{"roadmap":[]}');
 };

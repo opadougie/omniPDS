@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
@@ -36,10 +35,6 @@ interface Transaction { id: string; amount: number; currency: string; category: 
 interface WalletBalance { currency: string; amount: number; symbol: string; label: string; }
 interface ProjectTask { id: string; title: string; status: 'todo' | 'doing' | 'done'; priority: 'low' | 'medium' | 'high'; }
 interface Note { id: string; title: string; content: string; tags: string; updatedAt: string; }
-interface Contact { id: string; name: string; handle?: string; category: string; lastContacted: string; notes?: string; }
-interface Asset { id: string; name: string; serial?: string; value: number; category: string; location: string; purchaseDate: string; }
-interface HealthMetric { id: string; date: string; type: string; value: number; unit: string; }
-interface Message { id: string; sender: string; receiver: string; text: string; timestamp: string; encrypted: boolean; }
 
 // --- DATABASE SERVICE MUSCLE ---
 let db: any = null;
@@ -49,6 +44,7 @@ const dbService = {
   logListeners: [] as ((log: string) => void)[],
   onLog(cb: (log: string) => void) { this.logListeners.push(cb); },
   notifyLog(msg: string) { this.logListeners.forEach(cb => cb(`[${new Date().toLocaleTimeString()}] ${msg}`)); },
+  ftsEnabled: false,
 
   async init() {
     if (db) return db;
@@ -60,8 +56,8 @@ const dbService = {
       if (response.ok) {
         const arrayBuffer = await response.arrayBuffer();
         db = new SQL.Database(new Uint8Array(arrayBuffer));
-        this.notifyLog("Sovereign Ledger Synced: FTS5 Muscle Active.");
-      } else { throw new Error("Load failed"); }
+        this.notifyLog("Sovereign Ledger Synced: Heavy Core Ready.");
+      } else { throw new Error("Fresh start"); }
     } catch (e) {
       db = new SQL.Database();
       this.createSchema();
@@ -80,8 +76,6 @@ const dbService = {
       CREATE TABLE IF NOT EXISTS health (id TEXT PRIMARY KEY, date TEXT, type TEXT, value REAL, unit TEXT);
       CREATE TABLE IF NOT EXISTS contacts (id TEXT PRIMARY KEY, name TEXT, handle TEXT, category TEXT, lastContacted TEXT, notes TEXT);
       CREATE TABLE IF NOT EXISTS assets (id TEXT PRIMARY KEY, name TEXT, serial TEXT, value REAL, category TEXT, location TEXT, purchaseDate TEXT);
-      CREATE TABLE IF NOT EXISTS messages (id TEXT PRIMARY KEY, sender TEXT, receiver TEXT, text TEXT, timestamp TEXT, encrypted INTEGER);
-      CREATE TABLE IF NOT EXISTS media (id TEXT PRIMARY KEY, name TEXT, mimeType TEXT, size INTEGER, cid TEXT, addedAt TEXT);
       
       INSERT OR IGNORE INTO balances VALUES ('USD', 12760.75, '$', 'Main Ledger');
       INSERT OR IGNORE INTO balances VALUES ('BTC', 0.12, '₿', 'Sovereign Vault');
@@ -92,14 +86,25 @@ const dbService = {
   ensureFTS() {
     try {
       db.run(`CREATE VIRTUAL TABLE IF NOT EXISTS fts_ledger USING fts5(id UNINDEXED, content, type UNINDEXED);`);
-    } catch(e) { console.error("FTS5 Unavailable"); }
+      this.ftsEnabled = true;
+      this.notifyLog("FTS5 Muscle Activated.");
+    } catch(e) { 
+      this.ftsEnabled = false;
+      this.notifyLog("FTS5 Unsupported. Using LIKE Fallback."); 
+    }
   },
 
   async persist() {
     const binary = db.export();
-    fetch('/api/pds/persist', { method: 'POST', body: binary });
+    // CRITICAL: Explicitly set Content-Type so server's bodyParser.raw can identify the stream
+    fetch('/api/pds/persist', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: binary 
+    });
   },
 
+  // Defined as a method to ensure generic type inference works correctly within the object
   queryAll<T>(sql: string, params: any[] = []): T[] {
     try {
       const res = db.exec(sql, params);
@@ -113,16 +118,34 @@ const dbService = {
     } catch (e) { return []; }
   },
 
+  universalSearch(term: string) {
+    if (!term.trim()) return [];
+    if (this.ftsEnabled) {
+      try {
+        // Fix: Removed <any> to prevent "Untyped function calls" error when 'this' might be inferred as 'any'
+        return this.queryAll("SELECT * FROM fts_ledger WHERE fts_ledger MATCH ? ORDER BY rank", [`${term}*`]);
+      } catch (e) { /* fallback */ }
+    }
+    // Fix: Removed <any> from fallback search to prevent "Untyped function calls" error
+    return this.queryAll(`
+      SELECT id, text as content, 'SOCIAL' as type FROM posts WHERE text LIKE ?
+      UNION ALL
+      SELECT id, description as content, 'FINANCE' as type FROM transactions WHERE description LIKE ?
+      UNION ALL
+      SELECT id, title as content, 'VAULT' as type FROM notes WHERE title LIKE ?
+    `, [`%${term}%`, `%${term}%`, `%${term}%`]);
+  },
+
   addPost(p: SocialPost) { 
     db.run("INSERT INTO posts VALUES (?,?,?,?,?)", [p.id, p.author, p.text, p.likes, p.createdAt]); 
-    db.run("INSERT INTO fts_ledger VALUES (?,?,?)", [p.id, p.text, 'SOCIAL']);
+    if (this.ftsEnabled) db.run("INSERT INTO fts_ledger VALUES (?,?,?)", [p.id, p.text, 'SOCIAL']);
     this.persist(); 
   },
 
   addTransaction(t: Transaction) {
     db.run("INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?)", [t.id, t.amount, t.currency, t.category, t.type, t.date, t.description, t.recipient || '']);
     db.run("UPDATE balances SET amount = amount " + (t.type === 'income' ? '+' : '-') + " ? WHERE currency = ?", [t.amount, t.currency]);
-    db.run("INSERT INTO fts_ledger VALUES (?,?,?)", [t.id, t.description, 'FINANCE']);
+    if (this.ftsEnabled) db.run("INSERT INTO fts_ledger VALUES (?,?,?)", [t.id, t.description, 'FINANCE']);
     this.persist();
   }
 };
@@ -130,12 +153,12 @@ const dbService = {
 // --- GEMINI SERVICE ---
 const aiService = {
   async getInsights(data: any) {
-    const key = (window as any).process?.env?.API_KEY;
-    if (!key) return { insights: [] };
-    const genAI = new GoogleGenAI({ apiKey: key });
+    // Correct usage of process.env.API_KEY as per guidelines
+    if (!process.env.API_KEY) return { insights: [] };
+    const genAI = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const res = await genAI.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Analyze my life data: ${JSON.stringify(data)}. Return 3 strategic insights in JSON.`,
+      contents: `Analyze life data: ${JSON.stringify(data)}. Return 3 strategic insights in JSON.`,
       config: { responseMimeType: "application/json", responseSchema: {
         type: Type.OBJECT,
         properties: {
@@ -145,7 +168,8 @@ const aiService = {
         }
       }}
     });
-    return JSON.parse(res.text);
+    // Use .text property directly
+    return JSON.parse(res.text || '{"insights":[]}');
   }
 };
 
@@ -155,13 +179,14 @@ const App: React.FC = () => {
   const [dbReady, setDbReady] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [hwStats, setHwStats] = useState<any>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
   
   // Data State
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [balances, setBalances] = useState<WalletBalance[]>([]);
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
-  const [notes, setNotes] = useState<Note[]>([]);
   
   useEffect(() => {
     dbService.onLog(msg => setLogs(prev => [msg, ...prev].slice(0, 5)));
@@ -174,18 +199,27 @@ const App: React.FC = () => {
     };
     boot();
     const tick = setInterval(async () => {
-      const res = await fetch('/api/health').then(r => r.json());
-      setHwStats(res);
+      try {
+        const res = await fetch('/api/health').then(r => r.json());
+        setHwStats(res);
+      } catch (e) {}
     }, 5000);
     return () => clearInterval(tick);
   }, []);
+
+  useEffect(() => {
+    if (searchTerm.length > 1) {
+      setSearchResults(dbService.universalSearch(searchTerm));
+    } else {
+      setSearchResults([]);
+    }
+  }, [searchTerm]);
 
   const refresh = () => {
     setPosts(dbService.queryAll<SocialPost>("SELECT * FROM posts ORDER BY createdAt DESC"));
     setTransactions(dbService.queryAll<Transaction>("SELECT * FROM transactions ORDER BY date DESC"));
     setBalances(dbService.queryAll<WalletBalance>("SELECT * FROM balances"));
     setTasks(dbService.queryAll<ProjectTask>("SELECT * FROM tasks"));
-    setNotes(dbService.queryAll<Note>("SELECT * FROM notes"));
   };
 
   if (!dbReady) return (
@@ -227,7 +261,7 @@ const App: React.FC = () => {
 
         <div className="mt-8 pt-8 border-t border-gray-900 px-2">
            <div className="flex items-center gap-2 mb-4">
-              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+              <span className={`w-2 h-2 rounded-full ${dbReady ? 'bg-blue-500 animate-pulse' : 'bg-gray-700'}`}></span>
               <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Core Online</span>
            </div>
            <p className="text-[9px] font-mono text-blue-400/70 truncate">{logs[0] || 'Node Initialized.'}</p>
@@ -239,7 +273,26 @@ const App: React.FC = () => {
         <header className="h-20 border-b border-gray-900 flex items-center justify-between px-10 glass-panel z-50">
            <div className="relative w-96 group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-blue-400 transition-all" size={18} />
-              <input type="text" placeholder="Universal FTS5 Search..." className="w-full bg-[#080b12] border border-gray-800 rounded-2xl py-3 pl-12 pr-4 outline-none focus:ring-2 focus:ring-blue-600/30 transition-all text-sm font-medium" />
+              <input 
+                type="text" 
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder="Universal Search..." 
+                className="w-full bg-[#080b12] border border-gray-800 rounded-2xl py-3 pl-12 pr-4 outline-none focus:ring-2 focus:ring-blue-600/30 transition-all text-sm font-medium placeholder-gray-700" 
+              />
+              {searchResults.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-4 bg-[#080b12] border border-gray-800 rounded-3xl shadow-2xl overflow-hidden z-50">
+                  {searchResults.map((res, i) => (
+                    <button key={i} className="w-full flex items-center gap-4 px-6 py-4 hover:bg-blue-600/10 border-b border-gray-800/50 last:border-0 transition-all text-left">
+                       <div className="p-2 bg-gray-900 rounded-lg text-blue-400"><Database size={14}/></div>
+                       <div>
+                          <p className="font-bold text-sm text-gray-100">{res.content}</p>
+                          <span className="text-[10px] font-black text-gray-600 uppercase tracking-tighter">{res.type}</span>
+                       </div>
+                    </button>
+                  ))}
+                </div>
+              )}
            </div>
            <div className="flex items-center gap-8">
               <div className="text-right hidden sm:block">
@@ -263,7 +316,7 @@ const App: React.FC = () => {
                 <div className="space-y-10 animate-in fade-in duration-500">
                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                       <StatCard label="Ledger Valuation" value={`$${balances[0]?.amount.toLocaleString() || '0'}`} icon={<CreditCard/>} color="text-blue-400" />
-                      <StatCard label="Data Muscle" value="FTS5 Active" icon={<Database/>} color="text-green-400" />
+                      <StatCard label="Data Index" value={dbService.ftsEnabled ? "FTS5 Active" : "LIKE Fallback"} icon={<Database/>} color="text-green-400" />
                       <StatCard label="System Load" value={`${hwStats?.system?.cpus || 0} Cores`} icon={<Cpu/>} color="text-purple-400" />
                       <StatCard label="Memory Matrix" value={`${(hwStats?.system?.freeMem / 1024 / 1024 / 1024 || 0).toFixed(1)}GB Free`} icon={<HardDrive/>} color="text-amber-400" />
                    </div>
@@ -272,12 +325,8 @@ const App: React.FC = () => {
                       <div className="lg:col-span-8 p-10 bg-[#080b12] rounded-[3rem] border border-gray-900 shadow-2xl relative overflow-hidden muscle-pulse">
                          <div className="flex items-center justify-between mb-10">
                             <div>
-                               <h3 className="text-2xl font-black text-white tracking-tight">System Performance Graph</h3>
-                               <p className="text-gray-500 text-sm">Real-time telemetry from Sovereign Node.</p>
-                            </div>
-                            <div className="flex gap-4">
-                               <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500"></div><span className="text-[10px] font-black uppercase text-gray-500">Compute</span></div>
-                               <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-green-500"></div><span className="text-[10px] font-black uppercase text-gray-500">I/O Sync</span></div>
+                               <h3 className="text-2xl font-black text-white tracking-tight">Node Telemetry Graph</h3>
+                               <p className="text-gray-500 text-sm">Real-time performance from Sovereign Node Cluster.</p>
                             </div>
                          </div>
                          <div className="h-80 w-full">
@@ -291,8 +340,8 @@ const App: React.FC = () => {
                       </div>
                       <div className="lg:col-span-4 p-8 bg-[#080b12] border border-gray-900 rounded-[2.5rem] flex flex-col h-[520px]">
                          <h4 className="text-lg font-black mb-8 flex items-center justify-between">
-                            Life Firehose
-                            <span className="text-[9px] font-black text-blue-500 bg-blue-500/10 px-2 py-1 rounded-full uppercase tracking-widest">Live</span>
+                            Recent Events
+                            <span className="text-[9px] font-black text-blue-500 bg-blue-500/10 px-2 py-1 rounded-full uppercase tracking-widest">Sovereign</span>
                          </h4>
                          <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-2">
                             {transactions.slice(0, 5).map(t => (
@@ -306,7 +355,6 @@ const App: React.FC = () => {
                                  </div>
                               </div>
                             ))}
-                            {transactions.length === 0 && <p className="text-center py-20 text-gray-600 italic text-sm">Ledger stream empty...</p>}
                          </div>
                       </div>
                    </div>
@@ -352,8 +400,7 @@ const SocialModule = ({posts, onAdd}: any) => {
        <form onSubmit={submit} className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 shadow-xl">
           <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="What's happening in your decentralized consciousness?" className="w-full bg-transparent border-none focus:ring-0 text-lg resize-none placeholder-gray-700 h-24" />
           <div className="flex justify-between items-center mt-6 pt-6 border-t border-gray-900">
-             <div className="flex gap-4 text-gray-600"><button type="button" className="hover:text-blue-400"><Image size={20}/></button><button type="button" className="hover:text-blue-400"><Radio size={20}/></button></div>
-             <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2.5 rounded-full font-black text-[10px] uppercase tracking-widest transition-all">Broadcast</button>
+             <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-2.5 rounded-full font-black text-[10px] uppercase tracking-widest transition-all ml-auto">Broadcast</button>
           </div>
        </form>
        <div className="space-y-4">
@@ -393,12 +440,7 @@ const FinanceModule = ({txs, balances, onAdd}: any) => {
              <div className="relative z-10">
                 <p className="text-blue-100 text-sm font-medium mb-1">Total Sovereign Liquidity</p>
                 <h3 className="text-5xl font-black tracking-tighter text-white mb-10">${balances[0]?.amount.toLocaleString()}</h3>
-                <div className="flex gap-6">
-                   <div className="bg-white/10 px-6 py-4 rounded-3xl border border-white/10"><p className="text-[9px] font-black uppercase text-blue-100 mb-1">BTC Reserves</p><p className="font-black text-lg text-white">0.12 BTC</p></div>
-                   <div className="bg-white/10 px-6 py-4 rounded-3xl border border-white/10"><p className="text-[9px] font-black uppercase text-blue-100 mb-1">Monthly Flow</p><p className="font-black text-lg text-white">+$4,250.00</p></div>
-                </div>
              </div>
-             <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-[100px] -mr-32 -mt-32"></div>
           </div>
           <div className="bg-[#080b12] rounded-[2.5rem] border border-gray-900 p-8">
              <h4 className="font-black text-white mb-8">Activity Ledger</h4>
@@ -440,30 +482,8 @@ const SystemLedgerModule = ({hwStats}: any) => {
           <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 group hover:border-blue-500/20 transition-all">
              <Terminal className="text-blue-500 mb-6" size={32} />
              <h4 className="text-xl font-black text-white mb-2">Protocol Node</h4>
-             <p className="text-gray-500 text-xs font-mono mb-4">{hwStats?.core || 'Loading Node...'}</p>
-             <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span><span className="text-[10px] font-black text-gray-600 uppercase">Resolvable DID:PLC</span></div>
-          </div>
-          <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 group hover:border-purple-500/20 transition-all">
-             <ShieldCheck className="text-purple-500 mb-6" size={32} />
-             <h4 className="text-xl font-black text-white mb-2">Sovereign Encryption</h4>
-             <p className="text-gray-500 text-xs font-mono mb-4">AES-256-GCM + Ed25519</p>
-             <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-purple-500"></span><span className="text-[10px] font-black text-gray-600 uppercase">Integrity Verified</span></div>
-          </div>
-          <div className="p-8 bg-[#080b12] rounded-[2.5rem] border border-gray-900 group hover:border-amber-500/20 transition-all">
-             <Database className="text-amber-500 mb-6" size={32} />
-             <h4 className="text-xl font-black text-white mb-2">Relay Status</h4>
-             <p className="text-gray-500 text-xs font-mono mb-4">Local/8087 Port Ingress</p>
-             <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span><span className="text-[10px] font-black text-gray-600 uppercase">Firehose Syncing</span></div>
-          </div>
-       </div>
-       <div className="p-8 bg-gray-950 border border-gray-900 rounded-[2.5rem] font-mono text-sm text-blue-400">
-          <p className="mb-2">/usr/omnipds/bin/heavy-core-stat</p>
-          <p className="text-gray-500 opacity-50">--- DATA METRICS ---</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-             <p>DB_SIZE: 1.2MB [COMPRESSED]</p>
-             <p>INDEX_TYPE: FTS5_MUSCLE_V2</p>
-             <p>UPTIME: {Math.floor(hwStats?.system?.uptime || 0)}s</p>
-             <p>CORES_ACTIVE: {hwStats?.system?.cpus || 0}</p>
+             <p className="text-gray-500 text-xs font-mono mb-4">{hwStats?.core || 'Node-3.0'}</p>
+             <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span><span className="text-[10px] font-black text-gray-600 uppercase">Sovereign Running</span></div>
           </div>
        </div>
     </div>

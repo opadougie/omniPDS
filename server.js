@@ -17,7 +17,7 @@ if (fs.existsSync(envPath)) {
 
 const app = express();
 const PORT = 8087;
-const DB_FILE = path.join(__dirname, 'omnipds.sqlite');
+const DB_FILE = path.resolve(__dirname, 'omnipds.sqlite');
 
 app.use(express.static(__dirname, {
   setHeaders: (res, filePath) => {
@@ -27,6 +27,7 @@ app.use(express.static(__dirname, {
   }
 }));
 
+// Muscle Persistence: Support 100MB SQLite Binary Streams
 app.use(bodyParser.raw({ type: 'application/octet-stream', limit: '100mb' }));
 
 app.get('/env.js', (req, res) => {
@@ -61,9 +62,15 @@ app.get('/api/pds/load', (req, res) => {
 
 app.post('/api/pds/persist', (req, res) => {
   try {
+    if (!req.body || req.body.length === 0) {
+      console.warn("[OmniPDS] Received empty persistence stream. Skipping write.");
+      return res.status(400).send("Empty payload");
+    }
     fs.writeFileSync(DB_FILE, req.body);
+    console.log(`[OmniPDS] Ledger persisted. Size: ${req.body.length} bytes.`);
     res.sendStatus(200);
   } catch (e) {
+    console.error("[OmniPDS] Persist Error:", e.message);
     res.status(500).send(e.message);
   }
 });
