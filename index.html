@@ -23,7 +23,6 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #111827; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
         
-        /* Muscle UI Animations */
         @keyframes muscle-pulse {
           0%, 100% { transform: scale(1); opacity: 1; }
           50% { transform: scale(1.005); opacity: 0.95; }
@@ -54,6 +53,7 @@
 </head>
 <body>
     <div id="root"></div>
-    <script type="text/babel" data-type="module" src="index.tsx"></script>
+    <!-- ADDED data-presets to ensure TypeScript and JSX are transformed correctly -->
+    <script type="text/babel" data-type="module" data-presets="react,typescript" src="index.tsx"></script>
 </body>
 </html>

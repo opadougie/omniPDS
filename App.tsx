@@ -30,7 +30,6 @@ const DEFAULT_CATEGORIES = ['Salary', 'Food', 'Groceries', 'Rent', 'Investments'
 const App: React.FC = () => {
   const [activeModule, setActiveModule] = useState<OmniModule>(OmniModule.COMMAND_CENTER);
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
-  const [copied, setCopied] = useState(false);
   const [dbReady, setDbReady] = useState(false);
   const [aiActive, setAiActive] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
@@ -54,7 +53,10 @@ const App: React.FC = () => {
     
     const loadDB = async () => {
       await dbService.initDB();
-      let keyDetected = !!process.env.API_KEY;
+      // Safe check for process.env which is injected by env.js
+      const envKey = (window as any).process?.env?.API_KEY;
+      let keyDetected = !!envKey;
+      
       try {
         const healthRes = await fetch('/api/health').then(r => r.json());
         keyDetected = healthRes.ai.active;
@@ -125,7 +127,7 @@ const App: React.FC = () => {
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow-2xl shadow-blue-900/20"><Radio className="text-white" size={28} /></div>
           <div className="hidden md:block">
             <h1 className="text-xl font-black tracking-tight leading-none text-white">OMNIPDS</h1>
-            <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mt-1">Sovereign Node v1.3</p>
+            <p className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mt-1">Sovereign Node v2.2</p>
           </div>
         </div>
         
@@ -163,7 +165,7 @@ const App: React.FC = () => {
                 type="text" 
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                placeholder="Universal Search (Ctrl + K)"
+                placeholder="Universal Search (FTS5 Active)"
                 className="w-full bg-[#080b12] border border-gray-800 rounded-2xl py-3.5 pl-12 pr-4 outline-none focus:ring-2 focus:ring-blue-600/30 focus:border-blue-500/50 transition-all text-sm font-medium"
               />
               {searchResults.length > 0 && (
@@ -197,7 +199,6 @@ const App: React.FC = () => {
           <div className="p-10 max-w-[1600px] mx-auto pb-32">{renderModule()}</div>
         </div>
 
-        {/* Real-time System Pulse */}
         <footer className="h-10 border-t border-gray-900 bg-[#080b12] flex items-center px-6 gap-6 z-40">
            <div className="flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${aiActive ? 'bg-blue-500 animate-pulse' : 'bg-gray-700'}`}></span>
@@ -205,7 +206,7 @@ const App: React.FC = () => {
            </div>
            <div className="h-4 w-px bg-gray-800"></div>
            <div className="flex-1 overflow-hidden whitespace-nowrap">
-              <p className="text-[10px] font-mono text-blue-400/70 animate-in slide-in-from-left-2">{logs[0] || 'System Ready. Waiting for interactions...'}</p>
+              <p className="text-[10px] font-mono text-blue-400/70">{logs[0] || 'System Ready. Waiting for interactions...'}</p>
            </div>
            <div className="h-4 w-px bg-gray-800"></div>
            <div className="flex items-center gap-4 text-[10px] font-bold text-gray-600 uppercase">

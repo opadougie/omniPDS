@@ -19,10 +19,10 @@ const app = express();
 const PORT = 8087;
 const DB_FILE = path.join(__dirname, 'omnipds.sqlite');
 
-// Static middleware - Serve all files from root
+// 1. CRITICAL: Handle static files FIRST with proper MIME mapping
 app.use(express.static(__dirname, {
   setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
+    if (filePath.endsWith('.tsx') || filePath.endsWith('.ts')) {
       res.setHeader('Content-Type', 'application/javascript');
     }
   }
@@ -39,7 +39,7 @@ app.get('/env.js', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
-    core: 'omnipds-2.1.0-muscle',
+    core: 'omnipds-2.2.0-muscle',
     ai: {
       active: !!process.env.API_KEY,
       tier: 'Tier 1'
@@ -48,6 +48,7 @@ app.get('/api/health', (req, res) => {
       platform: os.platform(),
       uptime: process.uptime(),
       load: os.loadavg(),
+      cpus: os.cpus().length,
       memory: {
         total: os.totalmem(),
         free: os.freemem()
@@ -75,10 +76,13 @@ app.post('/api/pds/persist', (req, res) => {
   }
 });
 
-// BULLETPROOF SPA FALLBACK for Express 5
-// This handles all non-API, non-file routes and serves index.html
+// 2. BULLETPROOF SPA FALLBACK: Only serve index.html if it's NOT a file request
 app.use((req, res, next) => {
-  if (!req.path.startsWith('/api') && !req.path.includes('.')) {
+  // If the request doesn't have an extension (like .js, .css, .tsx) and isn't an API call, serve index.html
+  const isApi = req.path.startsWith('/api');
+  const hasExtension = path.extname(req.path) !== '';
+  
+  if (!isApi && !hasExtension) {
     return res.sendFile(path.join(__dirname, 'index.html'));
   }
   next();
@@ -87,7 +91,7 @@ app.use((req, res, next) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
   ╔══════════════════════════════════════════════╗
-  ║         OMNIPDS SOVEREIGN CORE v2.1.0        ║
+  ║         OMNIPDS SOVEREIGN CORE v2.2.0        ║
   ║             --- MUSCLE EDITION ---           ║
   ╠══════════════════════════════════════════════╣
   ║ ADDR: http://localhost:${PORT}                 ║
